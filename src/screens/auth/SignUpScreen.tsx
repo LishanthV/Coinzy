@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
   View,
-  TextInput,
-  Pressable,
-  Animated,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -16,7 +13,6 @@ import { Button, FormInput } from '../../components/ui';
 import { colors, fonts, fontSizes, spacing, radii } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Ionicons } from '@expo/vector-icons';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'SignUp'>;
 
