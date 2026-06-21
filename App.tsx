@@ -9,9 +9,18 @@ import { RootNavigator } from './src/navigation/RootNavigator';
 import { colors } from './src/theme';
 import { useAuthStore } from './src/store/useAuthStore';
 import { scheduleDailyNotification, cancelDailyNotification } from './src/utils/notifications';
+import { useFinanceStore } from './src/store/useFinanceStore';
 
 export default function App() {
   const notificationsEnabled = useAuthStore((s) => s.notificationsEnabled);
+  const user = useAuthStore((s) => s.user);
+  const currentUserId = useFinanceStore((s) => s.currentUserId);
+
+  useEffect(() => {
+    if (user?.id && currentUserId !== user.id) {
+      useFinanceStore.getState().loadUserData(user.id);
+    }
+  }, [user, currentUserId]);
 
   useEffect(() => {
     if (notificationsEnabled) {

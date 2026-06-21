@@ -5,11 +5,20 @@ import { Account, Budget, Category, Transaction } from '../types';
 import { seedAccounts, seedBudgets, seedCategories, seedTransactions } from '../data/seedData';
 import { generateId, isSameMonth } from '../utils/format';
 
+export interface UserFinanceData {
+  accounts: Account[];
+  categories: Category[];
+  transactions: Transaction[];
+  budgets: Budget[];
+}
+
 interface FinanceState {
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];
   budgets: Budget[];
+  userStorage: Record<string, UserFinanceData>;
+  currentUserId: string | null;
 
   // Transactions
   addTransaction: (txn: Omit<Transaction, 'id'>) => void;
@@ -25,6 +34,10 @@ interface FinanceState {
 
   // Derived
   resetToSeed: () => void;
+
+  // User Loading
+  loadUserData: (userId: string) => void;
+  clearUserData: () => void;
 }
 
 function applyBalanceDelta(accounts: Account[], txn: Omit<Transaction, 'id'>, sign: 1 | -1): Account[] {
@@ -40,6 +53,33 @@ function applyBalanceDelta(accounts: Account[], txn: Omit<Transaction, 'id'>, si
   });
 }
 
+// Helper to update both active state and persistent userStorage in one go
+const updateStateAndStorage = (
+  set: any,
+  updater: (state: FinanceState) => Partial<FinanceState>
+) => {
+  set((state: FinanceState) => {
+    const updated = updater(state);
+    const finalState = { ...state, ...updated };
+
+    if (finalState.currentUserId) {
+      return {
+        ...updated,
+        userStorage: {
+          ...finalState.userStorage,
+          [finalState.currentUserId]: {
+            accounts: finalState.accounts,
+            categories: finalState.categories,
+            transactions: finalState.transactions,
+            budgets: finalState.budgets,
+          },
+        },
+      };
+    }
+    return updated;
+  });
+};
+
 export const useFinanceStore = create<FinanceState>()(
   persist(
     (set, get) => ({
@@ -47,18 +87,19 @@ export const useFinanceStore = create<FinanceState>()(
       categories: seedCategories,
       transactions: [],
       budgets: [],
+      userStorage: {},
+      currentUserId: null,
 
       addTransaction: (txn) =>
-        set((state) => ({
+        updateStateAndStorage(set, (state) => ({
           transactions: [{ ...txn, id: generateId('txn') }, ...state.transactions],
           accounts: applyBalanceDelta(state.accounts, txn, 1),
         })),
 
       updateTransaction: (id, changes) =>
-        set((state) => {
+        updateStateAndStorage(set, (state) => {
           const existing = state.transactions.find((t) => t.id === id);
-          if (!existing) return state;
-          // revert old effect, apply new
+          if (!existing) return {};
           let accounts = applyBalanceDelta(state.accounts, existing, -1);
           const updated = { ...existing, ...changes };
           accounts = applyBalanceDelta(accounts, updated, 1);
@@ -69,9 +110,9 @@ export const useFinanceStore = create<FinanceState>()(
         }),
 
       deleteTransaction: (id) =>
-        set((state) => {
+        updateStateAndStorage(set, (state) => {
           const existing = state.transactions.find((t) => t.id === id);
-          if (!existing) return state;
+          if (!existing) return {};
           const accounts = applyBalanceDelta(state.accounts, existing, -1);
           return {
             accounts,
@@ -80,7 +121,7 @@ export const useFinanceStore = create<FinanceState>()(
         }),
 
       setBudget: (categoryId, limit) =>
-        set((state) => {
+        updateStateAndStorage(set, (state) => {
           const existing = state.budgets.find((b) => b.categoryId === categoryId);
           if (existing) {
             return {
@@ -93,26 +134,63 @@ export const useFinanceStore = create<FinanceState>()(
         }),
 
       removeBudget: (categoryId) =>
-        set((state) => ({
+        updateStateAndStorage(set, (state) => ({
           budgets: state.budgets.filter((b) => b.categoryId !== categoryId),
         })),
 
       addAccount: (account) =>
-        set((state) => ({
+        updateStateAndStorage(set, (state) => ({
           accounts: [...state.accounts, { ...account, id: generateId('acc') }],
         })),
 
-
       resetToSeed: () =>
-        set({
+        updateStateAndStorage(set, () => ({
           accounts: seedAccounts.map((acc) => ({ ...acc, balance: 0 })),
           categories: seedCategories,
           transactions: [],
           budgets: [],
+        })),
+
+      loadUserData: (userId) =>
+        set((state) => {
+          const userData = state.userStorage[userId] || {
+            accounts: seedAccounts.map((acc) => ({ ...acc, balance: 0 })),
+            categories: seedCategories,
+            transactions: [],
+            budgets: [],
+          };
+          return {
+            currentUserId: userId,
+            accounts: userData.accounts,
+            categories: userData.categories,
+            transactions: userData.transactions,
+            budgets: userData.budgets,
+          };
+        }),
+
+      clearUserData: () =>
+        set((state) => {
+          let userStorage = { ...state.userStorage };
+          if (state.currentUserId) {
+            userStorage[state.currentUserId] = {
+              accounts: state.accounts,
+              categories: state.categories,
+              transactions: state.transactions,
+              budgets: state.budgets,
+            };
+          }
+          return {
+            currentUserId: null,
+            userStorage,
+            accounts: seedAccounts.map((acc) => ({ ...acc, balance: 0 })),
+            categories: seedCategories,
+            transactions: [],
+            budgets: [],
+          };
         }),
     }),
     {
-      name: 'coinzy-finance',
+      name: 'coinzy-finance-v2',
       storage: createJSONStorage(() => AsyncStorage),
     }
   )

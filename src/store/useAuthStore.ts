@@ -8,8 +8,10 @@ import {
   scheduleDailyNotification,
   cancelDailyNotification,
 } from '../utils/notifications';
+import { useFinanceStore } from './useFinanceStore';
 
 interface RegisteredUser {
+  id: string;
   name: string;
   email: string;
   password: string;
@@ -38,6 +40,7 @@ export const useAuthStore = create<AuthState>()(
       notificationsEnabled: false,
       registeredUsers: {
         'demo@coinzy.com': {
+          id: 'usr_demo',
           name: 'Demo User',
           email: 'demo@coinzy.com',
           password: 'password123',
@@ -56,11 +59,18 @@ export const useAuthStore = create<AuthState>()(
             throw new Error('An account with this email already exists.');
           }
 
+          const newUserId = 'usr_' + Math.random().toString(36).substring(2, 11);
+
           const newUser: RegisteredUser = {
+            id: newUserId,
             name: name.trim(),
             email: emailLower,
             password: password,
           };
+
+          // Save current user's data and load new user's empty data
+          useFinanceStore.getState().clearUserData();
+          useFinanceStore.getState().loadUserData(newUserId);
 
           set((state) => ({
             registeredUsers: {
@@ -70,7 +80,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             hasOnboarded: true,
             user: {
-              id: 'usr_' + Math.random().toString(36).substring(2, 11),
+              id: newUserId,
               name: newUser.name,
               email: emailLower,
               currency: 'USD',
@@ -99,11 +109,17 @@ export const useAuthStore = create<AuthState>()(
             throw new Error('Incorrect password. Please try again.');
           }
 
+          const userId = userRecord.id || 'usr_' + Math.random().toString(36).substring(2, 11);
+
+          // Save current user's data and load the logging-in user's data
+          useFinanceStore.getState().clearUserData();
+          useFinanceStore.getState().loadUserData(userId);
+
           set({
             isAuthenticated: true,
             hasOnboarded: true,
             user: {
-              id: 'usr_' + Math.random().toString(36).substring(2, 11),
+              id: userId,
               name: userRecord.name,
               email: emailLower,
               currency: 'USD',
@@ -118,6 +134,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logOut: async () => {
+        // Save current user's data first and clear state
+        useFinanceStore.getState().clearUserData();
         set({ isAuthenticated: false, user: null });
       },
 
