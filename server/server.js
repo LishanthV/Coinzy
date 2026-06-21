@@ -13,23 +13,38 @@ const JWT_SECRET = process.env.JWT_SECRET || 'coinzy_secret_key_12345';
 app.use(cors());
 app.use(express.json());
 
-// MySQL Connection Pool Setup
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
+// MySQL Connection Details (without database name first)
+const dbConfig = {
+  host: process.env.DB_HOST || '127.0.0.1',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'coinzy_db',
-  port: process.env.DB_PORT || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-});
+  port: Number(process.env.DB_PORT) || 3306,
+};
+const DB_NAME = process.env.DB_NAME || 'coinzy_db';
 
-// Test connection and run schema check on startup
+let pool;
+
+// Test connection, auto-create database & run schema check on startup
 (async () => {
   try {
+    console.log('[Database] Connecting to MySQL server to check database...');
+    // 1. Establish single connection to create database if not exists
+    const tempConnection = await mysql.createConnection(dbConfig);
+    await tempConnection.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\``);
+    await tempConnection.end();
+    console.log(`[Database] Verified/Created MySQL database: "${DB_NAME}"`);
+
+    // 2. Initialize connection pool with database selected
+    pool = mysql.createPool({
+      ...dbConfig,
+      database: DB_NAME,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+    });
+
     const connection = await pool.getConnection();
-    console.log('Successfully connected to the MySQL database!');
+    console.log(`[Database] Successfully connected pool to MySQL database: "${DB_NAME}"!`);
     
     // Check if database tables exist
     await connection.query(`
@@ -83,6 +98,12 @@ const pool = mysql.createPool({
     `);
 
     connection.release();
+
+    // Start Express Listener after DB is initialized
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Coinzy MySQL-backed Express server is running on http://localhost:${PORT}`);
+    });
+
   } catch (error) {
     console.error('CRITICAL: Database initialization failed. Please make sure MySQL is running and credentials in server/.env are correct.', error.message);
   }
@@ -443,9 +464,4 @@ app.post('/api/data/reset', authenticateToken, async (req, res) => {
   } finally {
     connection.release();
   }
-});
-
-// Start Server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Coinzy MySQL-backed Express server is running on http://localhost:${PORT}`);
 });
