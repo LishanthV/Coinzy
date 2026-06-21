@@ -1,0 +1,107 @@
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
+import DashboardScreen from '../screens/dashboard/DashboardScreen';
+import HistoryScreen from '../screens/history/HistoryScreen';
+import StatisticsScreen from '../screens/statistics/StatisticsScreen';
+import BudgetsScreen from '../screens/budgets/BudgetsScreen';
+import SettingsScreen from '../screens/settings/SettingsScreen';
+import { colors, fonts, fontSizes, radii, spacing } from '../theme';
+import { MainTabParamList, RootStackParamList } from './types';
+
+const Tab = createBottomTabNavigator<MainTabParamList>();
+
+const TAB_ICONS: Record<string, { active: string; inactive: string }> = {
+  Dashboard: { active: 'home', inactive: 'home-outline' },
+  History: { active: 'list', inactive: 'list-outline' },
+  Statistics: { active: 'bar-chart', inactive: 'bar-chart-outline' },
+  Budgets: { active: 'wallet', inactive: 'wallet-outline' },
+  Settings: { active: 'person', inactive: 'person-outline' },
+};
+
+function FAB() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  return (
+    <Pressable
+      onPress={() => navigation.navigate('AddTransaction', {})}
+      style={({ pressed }) => [styles.fab, pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] }]}
+    >
+      <Ionicons name="add" size={28} color={colors.white} />
+    </Pressable>
+  );
+}
+
+export function MainNavigator() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarStyle: styles.tabBar,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textFaint,
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarIcon: ({ focused, color, size }) => {
+          const icons = TAB_ICONS[route.name];
+          const iconName = focused ? icons.active : icons.inactive;
+          return <Ionicons name={iconName as any} size={22} color={color} />;
+        },
+      })}
+    >
+      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Home' }} />
+      <Tab.Screen name="History" component={HistoryScreen} />
+      <Tab.Screen
+        name="Statistics"
+        component={StatisticsScreen}
+        options={{
+          tabBarButton: (props) => (
+            <View style={styles.fabContainer}>
+              {props.children}
+              <FAB />
+            </View>
+          ),
+        }}
+      />
+      <Tab.Screen name="Budgets" component={BudgetsScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
+    </Tab.Navigator>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabBar: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.borderSoft,
+    borderTopWidth: 1,
+    height: 64,
+    paddingBottom: 8,
+    paddingTop: 8,
+  },
+  tabLabel: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: fontSizes.xs,
+    marginTop: 2,
+  },
+  fabContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fab: {
+    position: 'absolute',
+    top: -24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+});
