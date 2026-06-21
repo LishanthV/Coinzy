@@ -176,10 +176,38 @@ app.post('/api/auth/signup', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const userId = 'usr_' + Math.random().toString(36).substring(2, 11);
 
-    await pool.query(
-      'INSERT INTO users (id, name, email, password) VALUES (?, ?, ?, ?)',
-      [userId, name.trim(), emailLower, hashedPassword]
-    );
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Insert the user
+      await connection.query(
+        'INSERT INTO users (id, name, email, password) VALUES (?, ?, ?, ?)',
+        [userId, name.trim(), emailLower, hashedPassword]
+      );
+
+      // Create default accounts matching frontend seedData colors and icons
+      const defaultAccounts = [
+        { id: `acc_checking_${userId}`, name: 'Everyday Checking', type: 'checking', balance: 3240.55, color: '#6C6FE0', icon: 'card-outline' },
+        { id: `acc_savings_${userId}`, name: 'Savings', type: 'savings', balance: 12850.00, color: '#33C2A1', icon: 'wallet-outline' },
+        { id: `acc_credit_${userId}`, name: 'Visa Credit Card', type: 'credit', balance: -482.30, color: '#E2784E', icon: 'card' },
+        { id: `acc_cash_${userId}`, name: 'Cash', type: 'cash', balance: 120.00, color: '#E3A23C', icon: 'cash-outline' }
+      ];
+
+      for (const acc of defaultAccounts) {
+        await connection.query(
+          'INSERT INTO accounts (id, userId, name, type, balance, color, icon) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [acc.id, userId, acc.name, acc.type, acc.balance, acc.color, acc.icon]
+        );
+      }
+
+      await connection.commit();
+    } catch (err) {
+      await connection.rollback();
+      throw err;
+    } finally {
+      connection.release();
+    }
 
     // Create JWT token
     const token = jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '30d' });
@@ -458,10 +486,27 @@ app.post('/api/data/reset', authenticateToken, async (req, res) => {
   try {
     await connection.beginTransaction();
 
+    const userId = req.userId;
+
     // Delete user's accounts, budgets, and transactions
-    await connection.query('DELETE FROM transactions WHERE userId = ?', [req.userId]);
-    await connection.query('DELETE FROM budgets WHERE userId = ?', [req.userId]);
-    await connection.query('DELETE FROM accounts WHERE userId = ?', [req.userId]);
+    await connection.query('DELETE FROM transactions WHERE userId = ?', [userId]);
+    await connection.query('DELETE FROM budgets WHERE userId = ?', [userId]);
+    await connection.query('DELETE FROM accounts WHERE userId = ?', [userId]);
+
+    // Recreate default accounts matching frontend seedData with 0 balance
+    const defaultAccounts = [
+      { id: `acc_checking_${userId}`, name: 'Everyday Checking', type: 'checking', balance: 0.00, color: '#6C6FE0', icon: 'card-outline' },
+      { id: `acc_savings_${userId}`, name: 'Savings', type: 'savings', balance: 0.00, color: '#33C2A1', icon: 'wallet-outline' },
+      { id: `acc_credit_${userId}`, name: 'Visa Credit Card', type: 'credit', balance: 0.00, color: '#E2784E', icon: 'card' },
+      { id: `acc_cash_${userId}`, name: 'Cash', type: 'cash', balance: 0.00, color: '#E3A23C', icon: 'cash-outline' }
+    ];
+
+    for (const acc of defaultAccounts) {
+      await connection.query(
+        'INSERT INTO accounts (id, userId, name, type, balance, color, icon) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [acc.id, userId, acc.name, acc.type, acc.balance, acc.color, acc.icon]
+      );
+    }
 
     await connection.commit();
     res.json({ success: true });
