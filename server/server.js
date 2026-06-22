@@ -97,13 +97,47 @@ let pool;
         toAccountId VARCHAR(36) DEFAULT NULL,
         type VARCHAR(20) NOT NULL,
         amount DECIMAL(15, 2) NOT NULL,
-        categoryId VARCHAR(50) NOT NULL,
-        description TEXT,
+        categoryId VARCHAR(50) DEFAULT NULL,
+        note TEXT,
         date VARCHAR(50) NOT NULL,
+        merchant VARCHAR(255) DEFAULT NULL,
+        items TEXT,
         FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (accountId) REFERENCES accounts(id) ON DELETE CASCADE
       )
     `);
+
+    // Check if we need to run migrations on transactions table (for existing database schemas)
+    const [columns] = await connection.query(`SHOW COLUMNS FROM transactions`);
+    const columnNames = columns.map(col => col.Field);
+
+    // 1. Rename description to note if description exists and note does not
+    if (columnNames.includes('description') && !columnNames.includes('note')) {
+      console.log('[Database] Migrating: Renaming transactions.description to transactions.note...');
+      await connection.query(`ALTER TABLE transactions CHANGE description note TEXT`);
+    } else if (!columnNames.includes('note')) {
+      console.log('[Database] Migrating: Adding note column to transactions...');
+      await connection.query(`ALTER TABLE transactions ADD COLUMN note TEXT`);
+    }
+
+    // 2. Make categoryId nullable to support transfer transactions
+    const catCol = columns.find(col => col.Field === 'categoryId');
+    if (catCol && catCol.Null === 'NO') {
+      console.log('[Database] Migrating: Making transactions.categoryId nullable...');
+      await connection.query(`ALTER TABLE transactions MODIFY categoryId VARCHAR(50) DEFAULT NULL`);
+    }
+
+    // 3. Add merchant column if missing
+    if (!columnNames.includes('merchant')) {
+      console.log('[Database] Migrating: Adding merchant column to transactions...');
+      await connection.query(`ALTER TABLE transactions ADD COLUMN merchant VARCHAR(255) DEFAULT NULL`);
+    }
+
+    // 4. Add items column if missing
+    if (!columnNames.includes('items')) {
+      console.log('[Database] Migrating: Adding items column to transactions...');
+      await connection.query(`ALTER TABLE transactions ADD COLUMN items TEXT`);
+    }
 
     connection.release();
 
@@ -274,7 +308,11 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/accounts', authenticateToken, async (req, res) => {
   try {
     const [accounts] = await pool.query('SELECT * FROM accounts WHERE userId = ?', [req.userId]);
-    res.json(accounts);
+    const formatted = accounts.map(a => ({
+      ...a,
+      balance: Number(a.balance)
+    }));
+    res.json(formatted);
   } catch (error) {
     console.error('Fetch Accounts Error:', error);
     res.status(500).json({ error: 'Failed to fetch accounts.' });
@@ -307,7 +345,11 @@ app.post('/api/accounts', authenticateToken, async (req, res) => {
 app.get('/api/budgets', authenticateToken, async (req, res) => {
   try {
     const [budgets] = await pool.query('SELECT * FROM budgets WHERE userId = ?', [req.userId]);
-    res.json(budgets);
+    const formatted = budgets.map(b => ({
+      ...b,
+      limit: Number(b.limit)
+    }));
+    res.json(formatted);
   } catch (error) {
     console.error('Fetch Budgets Error:', error);
     res.status(500).json({ error: 'Failed to fetch budgets.' });
@@ -368,7 +410,13 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
       'SELECT * FROM transactions WHERE userId = ? ORDER BY date DESC',
       [req.userId]
     );
-    res.json(transactions);
+    const formatted = transactions.map(t => ({
+      ...t,
+      amount: Number(t.amount),
+      note: t.note !== undefined ? t.note : (t.description || ''),
+      items: typeof t.items === 'string' ? JSON.parse(t.items) : (t.items || [])
+    }));
+    res.json(formatted);
   } catch (error) {
     console.error('Fetch Transactions Error:', error);
     res.status(500).json({ error: 'Failed to fetch transactions.' });
@@ -376,20 +424,39 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/transactions', authenticateToken, async (req, res) => {
-  const { id, accountId, toAccountId, type, amount, categoryId, description, date } = req.body;
+  const { id, accountId, toAccountId, type, amount, categoryId, note, description, date, merchant, items } = req.body;
 
-  if (!id || !accountId || !type || amount === undefined || !categoryId || !date) {
+  if (!id || !accountId || !type || amount === undefined || !date) {
     return res.status(400).json({ error: 'Missing required transaction fields.' });
+  }
+  if (type !== 'transfer' && !categoryId) {
+    return res.status(400).json({ error: 'Missing category for non-transfer transaction.' });
   }
 
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
+    const noteVal = note !== undefined ? note : (description || '');
+    const itemsVal = items ? (typeof items === 'string' ? items : JSON.stringify(items)) : '[]';
+    const merchantVal = merchant || null;
+
     // Insert transaction
     await connection.query(
-      'INSERT INTO transactions (id, userId, accountId, toAccountId, type, amount, categoryId, description, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, req.userId, accountId, toAccountId || null, type, amount, categoryId, description || '', date]
+      'INSERT INTO transactions (id, userId, accountId, toAccountId, type, amount, categoryId, note, date, merchant, items) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        id,
+        req.userId,
+        accountId,
+        type === 'transfer' ? toAccountId : null,
+        type,
+        amount,
+        type === 'transfer' ? null : categoryId,
+        noteVal,
+        date,
+        merchantVal,
+        itemsVal
+      ]
     );
 
     // Adjust balance (Add transaction delta)
@@ -408,7 +475,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
 
 app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { accountId, toAccountId, type, amount, categoryId, description, date } = req.body;
+  const { accountId, toAccountId, type, amount, categoryId, note, description, date, merchant, items } = req.body;
 
   const connection = await pool.getConnection();
   try {
@@ -417,7 +484,6 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
     // 1. Fetch old transaction
     const [txns] = await connection.query('SELECT * FROM transactions WHERE id = ? AND userId = ?', [id, req.userId]);
     if (txns.length === 0) {
-      connection.release();
       return res.status(404).json({ error: 'Transaction not found.' });
     }
     const existing = txns[0];
@@ -425,10 +491,25 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
     // 2. Revert old balance delta
     await adjustAccountBalance(connection, existing.type, existing.amount, existing.accountId, existing.toAccountId, -1);
 
+    const noteVal = note !== undefined ? note : (description || '');
+    const itemsVal = items ? (typeof items === 'string' ? items : JSON.stringify(items)) : '[]';
+    const merchantVal = merchant || null;
+
     // 3. Update transaction details
     await connection.query(
-      'UPDATE transactions SET accountId = ?, toAccountId = ?, type = ?, amount = ?, categoryId = ?, description = ?, date = ? WHERE id = ?',
-      [accountId, toAccountId || null, type, amount, categoryId, description || '', date, id]
+      'UPDATE transactions SET accountId = ?, toAccountId = ?, type = ?, amount = ?, categoryId = ?, note = ?, date = ?, merchant = ?, items = ? WHERE id = ?',
+      [
+        accountId,
+        type === 'transfer' ? toAccountId : null,
+        type,
+        amount,
+        type === 'transfer' ? null : categoryId,
+        noteVal,
+        date,
+        merchantVal,
+        itemsVal,
+        id
+      ]
     );
 
     // 4. Apply new balance delta
@@ -455,7 +536,6 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     // 1. Fetch transaction
     const [txns] = await connection.query('SELECT * FROM transactions WHERE id = ? AND userId = ?', [id, req.userId]);
     if (txns.length === 0) {
-      connection.release();
       return res.status(404).json({ error: 'Transaction not found.' });
     }
     const existing = txns[0];

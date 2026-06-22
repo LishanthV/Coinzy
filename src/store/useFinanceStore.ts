@@ -188,7 +188,7 @@ export const useFinanceStore = create<FinanceState>()(
 
       setBudget: async (categoryId, limit) => {
         const tempId = generateId('bud');
-        const budgetItem = { id: tempId, categoryId, limit, period: 'monthly' };
+        const budgetItem: Budget = { id: tempId, categoryId, limit, period: 'monthly' };
 
         // Optimistically update UI locally
         updateStateAndStorage(set, (state) => {

@@ -42,9 +42,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     toAccountId VARCHAR(36) DEFAULT NULL,
     type VARCHAR(20) NOT NULL, -- 'income', 'expense', 'transfer'
     amount DECIMAL(15, 2) NOT NULL,
-    categoryId VARCHAR(50) NOT NULL,
-    description TEXT,
+    categoryId VARCHAR(50) DEFAULT NULL, -- Nullable for transfers
+    note TEXT,
     date VARCHAR(50) NOT NULL,
+    merchant VARCHAR(255) DEFAULT NULL,  -- For scanned receipts
+    items TEXT,                          -- JSON string for itemized receipt lines
     FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (accountId) REFERENCES accounts(id) ON DELETE CASCADE
 );
