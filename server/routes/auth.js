@@ -56,7 +56,7 @@ async function sendOTPEmail(email, name, otp) {
 router.post('/register', authLimiter, validate(schemas.register), async (req, res) => {
   const { name, email, password } = req.validated;
   try {
-    const { rows: existing } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const [existing] = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.length > 0) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
@@ -96,7 +96,7 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Email and OTP are required.' });
   }
   try {
-    const { rows } = await pool.query(
+    const [rows] = await pool.query(
       'SELECT * FROM pending_registrations WHERE email = $1',
       [email]
     );
@@ -155,7 +155,7 @@ router.post('/resend-otp', resendLimiter, async (req, res) => {
   if (!email) return res.status(400).json({ error: 'Email is required.' });
 
   try {
-    const { rows } = await pool.query(
+    const [rows] = await pool.query(
       'SELECT * FROM pending_registrations WHERE email = $1',
       [email]
     );
@@ -205,7 +205,7 @@ router.post('/resend-otp', resendLimiter, async (req, res) => {
 router.post('/login', authLimiter, validate(schemas.login), async (req, res) => {
   const { email, password } = req.validated;
   try {
-    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const [rows] = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (rows.length === 0) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
@@ -243,7 +243,7 @@ router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
       return res.status(401).json({ error: 'Invalid or expired refresh token.' });
     }
 
-    const { rows } = await pool.query(
+    const [rows] = await pool.query(
       'SELECT * FROM refresh_tokens WHERE "userId" = $1 AND expires_at > NOW()',
       [decoded.userId]
     );
