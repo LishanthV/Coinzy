@@ -2,6 +2,8 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const otpGenerator = require('otp-generator');
 require('dotenv').config();
 const { validate, schemas } = require('./validation');
 
@@ -24,23 +26,34 @@ const pool = mysql.createPool({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Nodemailer transporter
+// ─────────────────────────────────────────────────────────────────────────────
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Token helpers
 // ─────────────────────────────────────────────────────────────────────────────
 const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'coinzy_access_secret_change_me';
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'coinzy_refresh_secret_change_me';
 
-// Short-lived access token — 15 minutes
 function generateAccessToken(userId) {
   return jwt.sign({ userId }, ACCESS_SECRET, { expiresIn: '15m' });
 }
 
-// Long-lived refresh token — 30 days
 function generateRefreshToken(userId) {
   return jwt.sign({ userId }, REFRESH_SECRET, { expiresIn: '30d' });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Auth middleware — verifies access token only
+// Auth middleware
 // ─────────────────────────────────────────────────────────────────────────────
 async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -66,7 +79,6 @@ async function authenticate(req, res, next) {
 async function runMigrations() {
   const conn = await pool.getConnection();
   try {
-    // Core tables
     await conn.query(`CREATE DATABASE IF NOT EXISTS coinzy_db`);
     await conn.query(`USE coinzy_db`);
 
@@ -122,7 +134,6 @@ async function runMigrations() {
       )
     `);
 
-    // ── NEW: refresh_tokens table ──────────────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS refresh_tokens (
         id VARCHAR(36) PRIMARY KEY,
@@ -134,7 +145,6 @@ async function runMigrations() {
       )
     `);
 
-    // ── NEW: savings_goals table ───────────────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS savings_goals (
         id VARCHAR(36) PRIMARY KEY,
@@ -148,7 +158,6 @@ async function runMigrations() {
       )
     `);
 
-    // ── NEW: recurring_transactions table ──────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS recurring_transactions (
         id VARCHAR(36) PRIMARY KEY,
@@ -169,7 +178,18 @@ async function runMigrations() {
       )
     `);
 
-
+    // ── OTP pending registrations table ──────────────────────────────────────
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS pending_registrations (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        otp VARCHAR(6) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
     // Existing column migrations
     const [cols] = await conn.query(`SHOW COLUMNS FROM transactions`);
@@ -194,31 +214,166 @@ async function runMigrations() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// OTP email sender
+// ─────────────────────────────────────────────────────────────────────────────
+async function sendOTPEmail(email, name, otp) {
+  await transporter.sendMail({
+    from: `"Coinzy" <${process.env.SMTP_FROM}>`,
+    to: email,
+    subject: 'Your Coinzy Verification Code',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #0f0f0f; color: #ffffff; border-radius: 16px;">
+        <h1 style="color: #7C3AED; margin-bottom: 8px;">Coinzy 💜</h1>
+        <h2 style="color: #ffffff; margin-bottom: 4px;">Verify your email</h2>
+        <p style="color: #9ca3af;">Hi ${name}, use the code below to complete your registration.</p>
+        <div style="background: #1f1f1f; border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0;">
+          <p style="color: #9ca3af; font-size: 13px; margin-bottom: 8px;">YOUR VERIFICATION CODE</p>
+          <h1 style="color: #7C3AED; font-size: 48px; letter-spacing: 12px; margin: 0;">${otp}</h1>
+        </div>
+        <p style="color: #9ca3af; font-size: 13px;">This code expires in <strong style="color:#fff">10 minutes</strong>. If you didn't request this, ignore this email.</p>
+      </div>
+    `,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Auth routes
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Register
+// Step 1 — Send OTP (replaces old register route)
 app.post(['/auth/register', '/api/auth/register'], validate(schemas.register), async (req, res) => {
   const { name, email, password } = req.validated;
   try {
+    // Check if email already registered
     const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {
       return res.status(409).json({ error: 'Email already in use' });
     }
-    const hashed = await bcrypt.hash(password, 12);
-    const userId = require('crypto').randomUUID();
-    await pool.query('INSERT INTO users (id, name, email, password) VALUES (?, ?, ?, ?)', [
-      userId, name, email, hashed,
-    ]);
 
+    // Hash password before storing in pending
+    const hashed = await bcrypt.hash(password, 12);
+
+    // Generate 6-digit OTP
+    const otp = otpGenerator.generate(6, {
+      digits: true,
+      lowerCaseAlphabets: false,
+      upperCaseAlphabets: false,
+      specialChars: false,
+    });
+
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const pendingId = require('crypto').randomUUID();
+
+    // Remove any existing pending registration for this email
+    await pool.query('DELETE FROM pending_registrations WHERE email = ?', [email]);
+
+    // Store pending registration
+    await pool.query(
+      'INSERT INTO pending_registrations (id, name, email, password, otp, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [pendingId, name, email, hashed, otp, expiresAt]
+    );
+
+    // Send OTP email
+    await sendOTPEmail(email, name, otp);
+
+    return res.status(200).json({
+      message: 'OTP sent to your email',
+      email, // return email so frontend knows where OTP was sent
+    });
+  } catch (err) {
+    console.error('Register error:', err);
+    return res.status(500).json({ error: 'Failed to send OTP. Please try again.' });
+  }
+});
+
+// Step 2 — Verify OTP and create account
+app.post(['/auth/verify-otp', '/api/auth/verify-otp'], async (req, res) => {
+  const { email, otp } = req.body;
+
+  if (!email || !otp) {
+    return res.status(400).json({ error: 'Email and OTP are required' });
+  }
+
+  try {
+    // Find pending registration
+    const [rows] = await pool.query(
+      'SELECT * FROM pending_registrations WHERE email = ? AND expires_at > NOW()',
+      [email]
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'OTP expired or not found. Please register again.' });
+    }
+
+    const pending = rows[0];
+
+    // Check OTP matches
+    if (pending.otp !== otp.toString().trim()) {
+      return res.status(400).json({ error: 'Invalid OTP. Please try again.' });
+    }
+
+    // Create user account
+    const userId = require('crypto').randomUUID();
+    await pool.query(
+      'INSERT INTO users (id, name, email, password) VALUES (?, ?, ?, ?)',
+      [userId, pending.name, pending.email, pending.password]
+    );
+
+    // Clean up pending registration
+    await pool.query('DELETE FROM pending_registrations WHERE email = ?', [email]);
+
+    // Generate tokens
     const accessToken = generateAccessToken(userId);
     const refreshToken = generateRefreshToken(userId);
     await storeRefreshToken(userId, refreshToken);
 
-    return res.status(201).json({ accessToken, refreshToken, userId, name, email });
+    return res.status(201).json({
+      accessToken,
+      refreshToken,
+      userId,
+      name: pending.name,
+      email: pending.email,
+    });
   } catch (err) {
-    console.error(err);
+    console.error('Verify OTP error:', err);
     return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Resend OTP
+app.post(['/auth/resend-otp', '/api/auth/resend-otp'], async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  try {
+    const [rows] = await pool.query(
+      'SELECT * FROM pending_registrations WHERE email = ?',
+      [email]
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'No pending registration found. Please register again.' });
+    }
+
+    const pending = rows[0];
+    const otp = otpGenerator.generate(6, {
+      digits: true,
+      lowerCaseAlphabets: false,
+      upperCaseAlphabets: false,
+      specialChars: false,
+    });
+
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await pool.query(
+      'UPDATE pending_registrations SET otp = ?, expires_at = ? WHERE email = ?',
+      [otp, expiresAt, email]
+    );
+
+    await sendOTPEmail(email, pending.name, otp);
+    return res.json({ message: 'New OTP sent' });
+  } catch (err) {
+    console.error('Resend OTP error:', err);
+    return res.status(500).json({ error: 'Failed to resend OTP' });
   }
 });
 
@@ -253,11 +408,10 @@ app.post(['/auth/login', '/api/auth/login'], validate(schemas.login), async (req
   }
 });
 
-// Refresh — exchange a valid refresh token for a new access token
+// Refresh token
 app.post(['/auth/refresh', '/api/auth/refresh'], validate(schemas.refreshToken), async (req, res) => {
   const { refreshToken } = req.validated;
   try {
-    // Verify signature first
     let decoded;
     try {
       decoded = jwt.verify(refreshToken, REFRESH_SECRET);
@@ -265,19 +419,16 @@ app.post(['/auth/refresh', '/api/auth/refresh'], validate(schemas.refreshToken),
       return res.status(401).json({ error: 'Invalid or expired refresh token' });
     }
 
-    // Check it exists in DB and isn't expired
     const [rows] = await pool.query(
       'SELECT * FROM refresh_tokens WHERE userId = ? AND expires_at > NOW()',
       [decoded.userId]
     );
 
-    // Find matching token (stored as TEXT — compare directly)
     const match = rows.find((r) => r.token === refreshToken);
     if (!match) {
       return res.status(401).json({ error: 'Refresh token not recognised' });
     }
 
-    // Rotate — delete old, issue new pair
     await pool.query('DELETE FROM refresh_tokens WHERE id = ?', [match.id]);
 
     const newAccessToken = generateAccessToken(decoded.userId);
@@ -291,7 +442,7 @@ app.post(['/auth/refresh', '/api/auth/refresh'], validate(schemas.refreshToken),
   }
 });
 
-// Logout — invalidate the refresh token immediately
+// Logout
 app.post('/auth/logout', authenticate, async (req, res) => {
   const { refreshToken } = req.body;
   try {
@@ -309,31 +460,30 @@ app.post('/auth/logout', authenticate, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper — store refresh token with expiry
+// Helper — store refresh token
 // ─────────────────────────────────────────────────────────────────────────────
 async function storeRefreshToken(userId, token) {
   const id = require('crypto').randomUUID();
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   await pool.query(
     'INSERT INTO refresh_tokens (id, userId, token, expires_at) VALUES (?, ?, ?, ?)',
     [id, userId, token, expiresAt]
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Clean up expired refresh tokens daily (simple in-process scheduler)
-// ─────────────────────────────────────────────────────────────────────────────
+// Clean up expired tokens daily
 setInterval(async () => {
   try {
     await pool.query('DELETE FROM refresh_tokens WHERE expires_at < NOW()');
-    console.log('🧹 Expired refresh tokens cleaned');
+    await pool.query('DELETE FROM pending_registrations WHERE expires_at < NOW()');
+    console.log('🧹 Expired tokens cleaned');
   } catch (err) {
     console.error('Cleanup error:', err);
   }
 }, 24 * 60 * 60 * 1000);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Your existing protected routes — all use `authenticate` middleware
+// Protected routes
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Accounts
@@ -499,11 +649,10 @@ app.post(['/recurring', '/api/recurring'], authenticate, validate(schemas.recurr
 });
 
 app.delete(['/recurring/:id', '/api/recurring/:id'], authenticate, async (req, res) => {
-  const cleanId = req.params.id;
   try {
     await pool.query(
       'UPDATE recurring_transactions SET isActive = 0 WHERE id = ? AND userId = ?',
-      [cleanId, req.userId]
+      [req.params.id, req.userId]
     );
     res.json({ success: true });
   } catch (error) {
@@ -565,7 +714,6 @@ app.post(['/recurring/process', '/api/recurring/process'], authenticate, async (
     connection.release();
   }
 });
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Start

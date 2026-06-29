@@ -6,6 +6,7 @@ import { useSecurityStore } from '../store/useSecurityStore';
 // Existing screens
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
+import OTPVerificationScreen from '../screens/auth/OTPVerificationScreen';
 import OnboardingScreen from '../screens/onboarding/OnboardingScreen';
 import { MainNavigator } from './MainNavigator';
 
@@ -26,12 +27,10 @@ export function RootNavigator() {
   const { user } = useAuthStore();
   const { isLocked, isLockEnabled, hasPin, initSecurity, lock } = useSecurityStore();
 
-  // Init security on mount
   useEffect(() => {
     initSecurity();
   }, []);
 
-  // Lock app when it goes to background
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (nextState === 'background' && isLockEnabled && hasPin) {
@@ -41,7 +40,6 @@ export function RootNavigator() {
     return () => subscription.remove();
   }, [isLockEnabled, hasPin, lock]);
 
-  // Show lock screen if app is locked (regardless of auth state)
   if (isLocked) {
     return <LockScreen />;
   }
@@ -49,19 +47,17 @@ export function RootNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!user ? (
-        // Auth stack
         <>
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="SignUp" component={SignUpScreen} />
+          <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
         </>
       ) : (
-        // Main app stack
         <>
           <Stack.Screen name="Main" component={MainNavigator} />
           <Stack.Screen name="TxnDetail" component={TxnDetailScreen} />
           <Stack.Screen name="AddTransaction" component={AddTransactionScreen} />
-          {/* PIN setup — accessible from Settings */}
           <Stack.Screen
             name="PinSetup"
             component={PinSetupScreen}

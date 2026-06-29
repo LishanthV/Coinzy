@@ -20,14 +20,12 @@ export default function SignUpScreen() {
   const navigation = useNavigation<Nav>();
   const signUp = useAuthStore((s) => s.signUp);
 
-  // Form Details
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Submit initial sign-up credentials
   const onSubmit = async () => {
     if (!name.trim() || !email.trim() || !password.trim()) {
       setError('Fill in every field to continue.');
@@ -53,12 +51,20 @@ export default function SignUpScreen() {
     setIsLoading(true);
 
     try {
-      const { error: err } = await signUp(name.trim(), email.trim(), password.trim());
-      if (err) {
-        setError(err.message || 'Failed to create account.');
+      const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${BASE_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), password: password.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to create account.');
+        return;
       }
+      navigation.navigate('OTPVerification', { email: email.trim(), name: name.trim() });
     } catch (err: any) {
-      setError(err?.message || 'An unexpected error occurred. Please try again.');
+      setError(err?.message || 'Connection failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -128,13 +134,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    marginTop: spacing.md,
-  },
   title: {
     color: colors.text,
     fontFamily: fonts.displayBold,
@@ -149,86 +148,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
     lineHeight: 20,
   },
-  emailHighlight: {
-    color: colors.text,
-    fontFamily: fonts.bodySemiBold,
-  },
   error: {
     color: colors.expense,
     fontFamily: fonts.bodyMedium,
     fontSize: fontSizes.sm,
     marginTop: spacing.md,
     textAlign: 'center',
-  },
-  // Split OTP Fields (adapted for 6 digits)
-  otpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingHorizontal: spacing.xs,
-    marginTop: spacing.lg,
-    marginBottom: spacing.xl,
-  },
-  otpBox: {
-    width: 46,
-    height: 48,
-    borderRadius: radii.sm,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  otpBoxFocused: {
-    borderColor: colors.primary,
-    backgroundColor: colors.surfaceRaised,
-  },
-  otpBoxFilled: {
-    borderColor: colors.primarySoft,
-  },
-  otpChar: {
-    fontSize: fontSizes.lg,
-    fontFamily: fonts.displayBold,
-    color: colors.text,
-  },
-  otpCursor: {
-    position: 'absolute',
-    height: 20,
-    width: 2,
-    backgroundColor: colors.primary,
-  },
-  hiddenInput: {
-    position: 'absolute',
-    width: 0,
-    height: 0,
-    opacity: 0,
-  },
-  // Resend code styling
-  resendContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.md,
-  },
-  timerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  resendTimerText: {
-    color: colors.textMuted,
-    fontFamily: fonts.body,
-    fontSize: fontSizes.sm,
-  },
-  resendPressable: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    padding: spacing.sm,
-  },
-  resendButtonText: {
-    color: colors.primary,
-    fontFamily: fonts.bodyMedium,
-    fontSize: fontSizes.sm,
   },
 });
