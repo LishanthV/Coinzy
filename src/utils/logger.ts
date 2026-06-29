@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 
 const LOG_SERVER = __DEV__
   ? 'http://10.224.237.42:5000/api/logs'
-  : null; // swap with your production URL when deploying
+  : 'https://coinzy-badr.onrender.com/api/logs';
 
 async function sendLog(level: string, message: string, extra?: Record<string, any>) {
   if (!LOG_SERVER) return;
