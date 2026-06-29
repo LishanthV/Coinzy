@@ -7,10 +7,9 @@ const { pool } = require('../db');
 const { validate, schemas } = require('../validation');
 const { authLimiter, otpLimiter, resendLimiter } = require('../middleware/rateLimiter');
 
-const ACCESS_SECRET  = process.env.JWT_ACCESS_SECRET;
+const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 
-// ─── Token helpers ────────────────────────────────────────────────────────────
 function generateAccessToken(userId) {
   return jwt.sign({ userId }, ACCESS_SECRET, { expiresIn: '15m' });
 }
@@ -23,12 +22,11 @@ async function storeRefreshToken(userId, token) {
   const id = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   await pool.query(
-    'INSERT INTO refresh_tokens (id, userId, token, expires_at) VALUES (?, ?, ?, ?)',
+    'INSERT INTO refresh_tokens (id, "userId", token, expires_at) VALUES ($1, $2, $3, $4)',
     [id, userId, token, expiresAt]
   );
 }
 
-// ─── Mailer helper ────────────────────────────────────────────────────────────
 async function sendOTPEmail(email, name, otp) {
   const nodemailer = require('nodemailer');
   const transporter = nodemailer.createTransport({
@@ -58,8 +56,7 @@ async function sendOTPEmail(email, name, otp) {
 router.post('/register', authLimiter, validate(schemas.register), async (req, res) => {
   const { name, email, password } = req.validated;
   try {
-    // Check if email already exists in users
-    const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    const { rows: existing } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.length > 0) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
@@ -74,14 +71,13 @@ router.post('/register', authLimiter, validate(schemas.register), async (req, re
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     const id = crypto.randomUUID();
 
-    // Upsert pending registration
     await pool.query(
       `INSERT INTO pending_registrations (id, name, email, password, otp, otp_attempts, resend_count, expires_at)
-       VALUES (?, ?, ?, ?, ?, 0, 0, ?)
-       ON DUPLICATE KEY UPDATE
-         name = VALUES(name), password = VALUES(password),
-         otp = VALUES(otp), otp_attempts = 0,
-         resend_count = 0, expires_at = VALUES(expires_at)`,
+       VALUES ($1, $2, $3, $4, $5, 0, 0, $6)
+       ON CONFLICT (email) DO UPDATE SET
+         name = EXCLUDED.name, password = EXCLUDED.password,
+         otp = EXCLUDED.otp, otp_attempts = 0,
+         resend_count = 0, expires_at = EXCLUDED.expires_at`,
       [id, name, email, hashedPassword, otp, expiresAt]
     );
 
@@ -100,8 +96,8 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Email and OTP are required.' });
   }
   try {
-    const [rows] = await pool.query(
-      'SELECT * FROM pending_registrations WHERE email = ?',
+    const { rows } = await pool.query(
+      'SELECT * FROM pending_registrations WHERE email = $1',
       [email]
     );
     if (rows.length === 0) {
@@ -110,34 +106,31 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
 
     const pending = rows[0];
 
-    // Check expiry
     if (new Date() > new Date(pending.expires_at)) {
-      await pool.query('DELETE FROM pending_registrations WHERE email = ?', [email]);
+      await pool.query('DELETE FROM pending_registrations WHERE email = $1', [email]);
       return res.status(400).json({ error: 'OTP has expired. Please register again.' });
     }
 
-    // Check max attempts (5)
     if (pending.otp_attempts >= 5) {
-      await pool.query('DELETE FROM pending_registrations WHERE email = ?', [email]);
+      await pool.query('DELETE FROM pending_registrations WHERE email = $1', [email]);
       return res.status(400).json({ error: 'Too many incorrect attempts. Please register again.' });
     }
 
     if (pending.otp !== String(otp).trim()) {
       await pool.query(
-        'UPDATE pending_registrations SET otp_attempts = otp_attempts + 1 WHERE email = ?',
+        'UPDATE pending_registrations SET otp_attempts = otp_attempts + 1 WHERE email = $1',
         [email]
       );
       const remaining = 5 - (pending.otp_attempts + 1);
       return res.status(400).json({ error: `Incorrect OTP. ${remaining} attempt(s) remaining.` });
     }
 
-    // OTP correct — create user
     const userId = crypto.randomUUID();
     await pool.query(
-      'INSERT INTO users (id, name, email, password) VALUES (?, ?, ?, ?)',
+      'INSERT INTO users (id, name, email, password) VALUES ($1, $2, $3, $4)',
       [userId, pending.name, pending.email, pending.password]
     );
-    await pool.query('DELETE FROM pending_registrations WHERE email = ?', [email]);
+    await pool.query('DELETE FROM pending_registrations WHERE email = $1', [email]);
 
     const accessToken = generateAccessToken(userId);
     const refreshToken = generateRefreshToken(userId);
@@ -162,8 +155,8 @@ router.post('/resend-otp', resendLimiter, async (req, res) => {
   if (!email) return res.status(400).json({ error: 'Email is required.' });
 
   try {
-    const [rows] = await pool.query(
-      'SELECT * FROM pending_registrations WHERE email = ?',
+    const { rows } = await pool.query(
+      'SELECT * FROM pending_registrations WHERE email = $1',
       [email]
     );
     if (rows.length === 0) {
@@ -172,12 +165,10 @@ router.post('/resend-otp', resendLimiter, async (req, res) => {
 
     const pending = rows[0];
 
-    // Max 3 resends
     if (pending.resend_count >= 3) {
       return res.status(429).json({ error: 'Maximum resend limit reached. Please register again after 15 minutes.' });
     }
 
-    // Throttle: 60 seconds between resends
     if (pending.last_resend) {
       const secondsSince = (Date.now() - new Date(pending.last_resend).getTime()) / 1000;
       if (secondsSince < 60) {
@@ -196,9 +187,9 @@ router.post('/resend-otp', resendLimiter, async (req, res) => {
 
     await pool.query(
       `UPDATE pending_registrations
-       SET otp = ?, otp_attempts = 0, resend_count = resend_count + 1,
-           last_resend = NOW(), expires_at = ?
-       WHERE email = ?`,
+       SET otp = $1, otp_attempts = 0, resend_count = resend_count + 1,
+           last_resend = NOW(), expires_at = $2
+       WHERE email = $3`,
       [otp, expiresAt, email]
     );
 
@@ -214,9 +205,8 @@ router.post('/resend-otp', resendLimiter, async (req, res) => {
 router.post('/login', authLimiter, validate(schemas.login), async (req, res) => {
   const { email, password } = req.validated;
   try {
-    const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (rows.length === 0) {
-      // Same message for both not found and wrong password (prevent user enumeration)
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
     const user = rows[0];
@@ -253,8 +243,8 @@ router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
       return res.status(401).json({ error: 'Invalid or expired refresh token.' });
     }
 
-    const [rows] = await pool.query(
-      'SELECT * FROM refresh_tokens WHERE userId = ? AND expires_at > NOW()',
+    const { rows } = await pool.query(
+      'SELECT * FROM refresh_tokens WHERE "userId" = $1 AND expires_at > NOW()',
       [decoded.userId]
     );
     const match = rows.find((r) => r.token === refreshToken);
@@ -262,8 +252,7 @@ router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
       return res.status(401).json({ error: 'Refresh token not recognised.' });
     }
 
-    // Rotate token
-    await pool.query('DELETE FROM refresh_tokens WHERE id = ?', [match.id]);
+    await pool.query('DELETE FROM refresh_tokens WHERE id = $1', [match.id]);
     const newAccessToken = generateAccessToken(decoded.userId);
     const newRefreshToken = generateRefreshToken(decoded.userId);
     await storeRefreshToken(decoded.userId, newRefreshToken);
@@ -283,8 +272,7 @@ router.post('/logout', async (req, res) => {
 
   try {
     if (refreshToken) {
-      // Delete just this session's refresh token
-      await pool.query('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
+      await pool.query('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
     }
     return res.json({ message: 'Logged out.' });
   } catch (err) {
