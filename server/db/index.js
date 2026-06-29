@@ -1,95 +1,116 @@
-const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || '127.0.0.1',
-  port: parseInt(process.env.DB_PORT) || 3306,
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME || 'coinzy_db',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  timezone: '+00:00',
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
 });
 
+// Override pool.query to translate "?" to "$1", "$2", etc. and return array format
+const originalPoolQuery = pool.query.bind(pool);
+pool.query = async function (sql, params) {
+  let index = 1;
+  const pgSql = sql.replace(/\?/g, () => `$${index++}`);
+  const result = await originalPoolQuery(pgSql, params);
+  return [result.rows, result.fields];
+};
+
+// Map pool.getConnection to pg pool.connect with transaction wrappers
+pool.getConnection = async function () {
+  const client = await pool.connect();
+  
+  // Map client query structure
+  const originalClientQuery = client.query.bind(client);
+  client.query = async function (sql, params) {
+    let index = 1;
+    const pgSql = sql.replace(/\?/g, () => `$${index++}`);
+    const result = await originalClientQuery(pgSql, params);
+    return [result.rows, result.fields];
+  };
+  
+  // Add MySQL transaction handlers
+  client.beginTransaction = async function () {
+    await originalClientQuery('BEGIN');
+  };
+  client.commit = async function () {
+    await originalClientQuery('COMMIT');
+  };
+  client.rollback = async function () {
+    await originalClientQuery('ROLLBACK');
+  };
+  
+  return client;
+};
+
+async function query(sql, params) {
+  const [rows, fields] = await pool.query(sql, params);
+  return [rows, fields];
+}
+
 async function runMigrations() {
-  const conn = await pool.getConnection();
+  const client = await pool.connect();
   try {
     // ── users ────────────────────────────────────────────────────────────────
-    await conn.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id           VARCHAR(36)  PRIMARY KEY,
         name         VARCHAR(255) NOT NULL,
         email        VARCHAR(255) NOT NULL UNIQUE,
         password     VARCHAR(255) NOT NULL,
-        created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_users_email (email)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+      );
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`);
 
     // ── pending_registrations ────────────────────────────────────────────────
-    await conn.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS pending_registrations (
-        id         VARCHAR(36)  PRIMARY KEY,
-        name       VARCHAR(255) NOT NULL,
-        email      VARCHAR(255) NOT NULL UNIQUE,
-        password   VARCHAR(255) NOT NULL,
-        otp        VARCHAR(6)   NOT NULL,
-        otp_attempts  TINYINT  DEFAULT 0,
-        resend_count  TINYINT  DEFAULT 0,
-        last_resend   DATETIME NULL,
-        expires_at DATETIME     NOT NULL,
-        INDEX idx_pending_email (email),
-        INDEX idx_pending_expires (expires_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        id            VARCHAR(36)  PRIMARY KEY,
+        name          VARCHAR(255) NOT NULL,
+        email         VARCHAR(255) NOT NULL UNIQUE,
+        password      VARCHAR(255) NOT NULL,
+        otp           VARCHAR(6)   NOT NULL,
+        otp_attempts  SMALLINT     DEFAULT 0,
+        resend_count  SMALLINT     DEFAULT 0,
+        last_resend   TIMESTAMP    NULL,
+        expires_at    TIMESTAMP    NOT NULL
+      );
     `);
-
-    // Add resend throttle columns if they don't exist (for existing DBs)
-    try {
-      await conn.query(`ALTER TABLE pending_registrations ADD COLUMN otp_attempts TINYINT DEFAULT 0`);
-    } catch (_) {}
-    try {
-      await conn.query(`ALTER TABLE pending_registrations ADD COLUMN resend_count TINYINT DEFAULT 0`);
-    } catch (_) {}
-    try {
-      await conn.query(`ALTER TABLE pending_registrations ADD COLUMN last_resend DATETIME NULL`);
-    } catch (_) {}
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_pending_email ON pending_registrations(email);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_pending_expires ON pending_registrations(expires_at);`);
 
     // ── refresh_tokens ───────────────────────────────────────────────────────
-    await conn.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS refresh_tokens (
         id         VARCHAR(36) PRIMARY KEY,
-        userId     VARCHAR(36) NOT NULL,
+        userId     VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         token      TEXT        NOT NULL,
-        expires_at DATETIME    NOT NULL,
-        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-        INDEX idx_rt_userId (userId),
-        INDEX idx_rt_expires (expires_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        expires_at TIMESTAMP   NOT NULL
+      );
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_rt_userId ON refresh_tokens(userId);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_rt_expires ON refresh_tokens(expires_at);`);
 
     // ── accounts ─────────────────────────────────────────────────────────────
-    await conn.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS accounts (
         id        VARCHAR(36)    PRIMARY KEY,
-        userId    VARCHAR(36)    NOT NULL,
+        userId    VARCHAR(36)    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         name      VARCHAR(255)   NOT NULL,
         type      VARCHAR(50)    NOT NULL,
         balance   DECIMAL(15,2)  NOT NULL DEFAULT 0,
         color     VARCHAR(50)    NOT NULL DEFAULT '#6366f1',
         icon      VARCHAR(50)    NOT NULL DEFAULT 'wallet',
-        currency  VARCHAR(3)     NOT NULL DEFAULT 'INR',
-        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-        INDEX idx_accounts_userId (userId)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        currency  VARCHAR(3)     NOT NULL DEFAULT 'INR'
+      );
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_accounts_userId ON accounts(userId);`);
 
     // ── transactions ─────────────────────────────────────────────────────────
-    await conn.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS transactions (
         id             VARCHAR(36)   PRIMARY KEY,
-        userId         VARCHAR(36)   NOT NULL,
-        accountId      VARCHAR(36)   NOT NULL,
+        userId         VARCHAR(36)   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        accountId      VARCHAR(36)   NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
         toAccountId    VARCHAR(36)   NULL,
         type           VARCHAR(20)   NOT NULL,
         amount         DECIMAL(15,2) NOT NULL,
@@ -99,58 +120,48 @@ async function runMigrations() {
         merchant       VARCHAR(255)  NULL,
         customCategory VARCHAR(255)  NULL,
         items          TEXT          NULL,
-        deleted_at     DATETIME      NULL,
-        created_at     TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (userId)    REFERENCES users(id)    ON DELETE CASCADE,
-        FOREIGN KEY (accountId) REFERENCES accounts(id) ON DELETE CASCADE,
-        INDEX idx_txn_userId   (userId),
-        INDEX idx_txn_date     (date),
-        INDEX idx_txn_deleted  (deleted_at),
-        INDEX idx_txn_category (categoryId)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        deleted_at     TIMESTAMP     NULL,
+        created_at     TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
+      );
     `);
-
-    // Add deleted_at for soft deletes if not exists
-    try {
-      await conn.query(`ALTER TABLE transactions ADD COLUMN deleted_at DATETIME NULL`);
-      await conn.query(`ALTER TABLE transactions ADD INDEX idx_txn_deleted (deleted_at)`);
-    } catch (_) {}
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_txn_userId ON transactions(userId);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_txn_date ON transactions(date);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_txn_deleted ON transactions(deleted_at);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_txn_category ON transactions(categoryId);`);
 
     // ── budgets ──────────────────────────────────────────────────────────────
-    await conn.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS budgets (
         id         VARCHAR(36)   PRIMARY KEY,
-        userId     VARCHAR(36)   NOT NULL,
+        userId     VARCHAR(36)   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         categoryId VARCHAR(50)   NOT NULL,
-        \`limit\`  DECIMAL(15,2) NOT NULL,
+        "limit"    DECIMAL(15,2) NOT NULL,
         period     VARCHAR(20)   NOT NULL DEFAULT 'monthly',
-        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-        UNIQUE KEY uq_budget_user_cat (userId, categoryId),
-        INDEX idx_budgets_userId (userId)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        CONSTRAINT uq_budget_user_cat UNIQUE (userId, categoryId)
+      );
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_budgets_userId ON budgets(userId);`);
 
     // ── savings_goals ────────────────────────────────────────────────────────
-    await conn.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS savings_goals (
         id            VARCHAR(36)   PRIMARY KEY,
-        userId        VARCHAR(36)   NOT NULL,
+        userId        VARCHAR(36)   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         name          VARCHAR(255)  NOT NULL,
         targetAmount  DECIMAL(15,2) NOT NULL,
         currentAmount DECIMAL(15,2) NOT NULL DEFAULT 0,
         targetDate    DATE          NULL,
-        updatedAt     BIGINT        NOT NULL DEFAULT 0,
-        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-        INDEX idx_goals_userId (userId)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        updatedAt     BIGINT        NOT NULL DEFAULT 0
+      );
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_goals_userId ON savings_goals(userId);`);
 
     // ── recurring_transactions ───────────────────────────────────────────────
-    await conn.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS recurring_transactions (
         id            VARCHAR(36)   PRIMARY KEY,
-        userId        VARCHAR(36)   NOT NULL,
-        accountId     VARCHAR(36)   NOT NULL,
+        userId        VARCHAR(36)   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        accountId     VARCHAR(36)   NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
         type          VARCHAR(20)   NOT NULL,
         amount        DECIMAL(15,2) NOT NULL,
         categoryId    VARCHAR(50)   NULL,
@@ -159,20 +170,18 @@ async function runMigrations() {
         frequency     VARCHAR(20)   NOT NULL,
         nextDueDate   DATE          NOT NULL,
         lastProcessed DATE          NULL,
-        isActive      TINYINT(1)    NOT NULL DEFAULT 1,
-        updatedAt     BIGINT        NOT NULL DEFAULT 0,
-        FOREIGN KEY (userId)    REFERENCES users(id)    ON DELETE CASCADE,
-        FOREIGN KEY (accountId) REFERENCES accounts(id) ON DELETE CASCADE,
-        INDEX idx_recurring_userId  (userId),
-        INDEX idx_recurring_due     (nextDueDate),
-        INDEX idx_recurring_active  (isActive)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        isActive      SMALLINT      NOT NULL DEFAULT 1,
+        updatedAt     BIGINT        NOT NULL DEFAULT 0
+      );
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_recurring_userId ON recurring_transactions(userId);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_recurring_due ON recurring_transactions(nextDueDate);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_recurring_active ON recurring_transactions(isActive);`);
 
     // ── error_logs ──────────────────────────────────────────────────────────
-    await conn.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS error_logs (
-        id INT AUTO_INCREMENT PRIMARY KEY,
+        id SERIAL PRIMARY KEY,
         level VARCHAR(10) NOT NULL DEFAULT 'ERROR',
         message TEXT NOT NULL,
         stack TEXT,
@@ -180,17 +189,17 @@ async function runMigrations() {
         user_id INT,
         app_version VARCHAR(20),
         platform VARCHAR(10),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_level (level),
-        INDEX idx_user (user_id),
-        INDEX idx_created (created_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_err_level ON error_logs(level);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_err_user ON error_logs(user_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_err_created ON error_logs(created_at);`);
 
-    console.log('✅ Migrations complete');
+    console.log('✅ PostgreSQL Migrations complete');
   } finally {
-    conn.release();
+    client.release();
   }
 }
 
-module.exports = { pool, runMigrations };
+module.exports = { query, pool, runMigrations };
