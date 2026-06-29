@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, Pressable, ScrollView, Platform } from 'react-n
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 
+import { logger } from '../utils/logger';
+
 interface Props {
   children: ReactNode;
 }
@@ -28,6 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary] React Component rendering crashed:', error, errorInfo);
+    logger.error(error.message, error, 'ErrorBoundary');
     this.setState({ error, errorInfo });
   }
 

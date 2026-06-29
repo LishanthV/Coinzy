@@ -13,6 +13,8 @@ import { scheduleDailyNotification, cancelDailyNotification } from './src/utils/
 import { useFinanceStore } from './src/store/useFinanceStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
+import { logger } from './src/utils/logger';
+
 export default function App() {
   const notificationsEnabled = useAuthStore((s) => s.notificationsEnabled);
   const user = useAuthStore((s) => s.user);
@@ -25,6 +27,7 @@ export default function App() {
       const defaultErrorHandler = ErrorUtils.getGlobalHandler();
       ErrorUtils.setGlobalHandler((error, isFatal) => {
         console.error('[Global JS Error]', error, 'Fatal:', isFatal);
+        logger.error(isFatal ? '[FATAL] ' + error.message : error.message, error, 'AppGlobal');
         if (isFatal) {
           Alert.alert(
             'Application Error',
@@ -46,6 +49,7 @@ export default function App() {
           all: true,
           onUnhandled: (id: any, error: any) => {
             console.warn('[Global Unhandled Rejection] Rejection ID:', id, 'Details:', error);
+            logger.error('[Unhandled Rejection] ID: ' + id, error, 'AppGlobalPromise');
           },
         });
       } catch (e) {
