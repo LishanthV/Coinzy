@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, Platform, Alert } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -13,6 +13,7 @@ import { scheduleDailyNotification, cancelDailyNotification } from './src/utils/
 import { useFinanceStore } from './src/store/useFinanceStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import UpdateBanner from './src/components/UpdateBanner';
+import * as Notifications from 'expo-notifications';
 
 import { logger } from './src/utils/logger';
 
@@ -21,6 +22,9 @@ export default function App() {
   const user = useAuthStore((s) => s.user);
   const currentUserId = useFinanceStore((s) => s.currentUserId);
   const themeMode = useThemeStore((s) => s.themeMode);
+
+  const notificationListener = useRef<any>(null);
+  const responseListener = useRef<any>(null);
 
   useEffect(() => {
     // 1. Hook global error handlers to intercept fatal app crashes
@@ -57,6 +61,26 @@ export default function App() {
         console.warn('Could not load promise rejection tracking utility:', e);
       }
     }
+  }, []);
+
+  useEffect(() => {
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Notification received:', notification);
+    });
+
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      const screen = response.notification.request.content.data?.screen;
+      console.log('User tapped notification, navigate to:', screen);
+    });
+
+    return () => {
+      if (notificationListener.current) {
+        notificationListener.current.remove();
+      }
+      if (responseListener.current) {
+        responseListener.current.remove();
+      }
+    };
   }, []);
 
   useEffect(() => {
