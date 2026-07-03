@@ -5,6 +5,7 @@ import {
   View,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -59,7 +60,18 @@ export default function SignUpScreen() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Failed to create account.');
+        if (res.status === 409) {
+          Alert.alert(
+            'User Already Created',
+            'An account with this email already exists. Please log in instead.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Log In', onPress: () => navigation.navigate('Login') }
+            ]
+          );
+        } else {
+          setError(data.error || 'Failed to create account.');
+        }
         return;
       }
       navigation.navigate('OTPVerification', { email: email.trim(), name: name.trim() });

@@ -29,7 +29,7 @@ router.post('/accounts', authenticate, validate(schemas.account), async (req, re
       'INSERT INTO accounts (id, userId, name, type, balance, color, icon, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [accountId, req.userId, name, type, balance, color, icon, currency || 'INR']
     );
-    return res.status(201).json({ id: accountId });
+    return res.status(200).json({ success: true, id: accountId });
   } catch (err) {
     console.error('Create account error:', err);
     return res.status(500).json({ error: 'Failed to create account.' });
@@ -97,7 +97,7 @@ router.post('/budgets', authenticate, validate(schemas.budget), async (req, res)
        ON DUPLICATE KEY UPDATE \`limit\` = VALUES(\`limit\`), period = VALUES(period)`,
       [budgetId, req.userId, categoryId, limit, period || 'monthly']
     );
-    return res.status(201).json({ id: budgetId });
+    return res.status(200).json({ success: true, id: budgetId });
   } catch (err) {
     console.error('Create budget error:', err);
     return res.status(500).json({ error: 'Failed to create budget.' });
@@ -194,10 +194,10 @@ router.post('/recurring', authenticate, validate(schemas.recurringTransaction), 
   const recId = id || ('rec_' + crypto.randomUUID());
   try {
     const [accCheck] = await pool.query(
-      'SELECT id FROM accounts WHERE id = ? AND userId = ?',
-      [accountId, req.userId]
+      'SELECT userId FROM accounts WHERE id = ?',
+      [accountId]
     );
-    if (accCheck.length === 0) {
+    if (accCheck.length === 0 || accCheck[0].userId !== req.userId) {
       return res.status(403).json({ error: 'Account does not belong to this user.' });
     }
 

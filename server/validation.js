@@ -52,7 +52,7 @@ const changePasswordSchema = z.object({
 const accountSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_\-]+$/, 'Invalid account ID format').transform(sanitizeString),
   name: z.string().min(1, 'Name is required').max(100).trim().transform(sanitizeString),
-  type: z.string().min(1, 'Type is required').max(50).trim().transform(sanitizeString),
+  type: z.enum(['checking', 'savings', 'credit', 'cash']),
   balance: z.union([z.number(), z.string().transform(Number)]).refine((val) => !isNaN(val), {
     message: 'Balance must be a valid number'
   }),
@@ -63,7 +63,7 @@ const accountSchema = z.object({
 });
 
 // ─── Transaction schemas ──────────────────────────────────────────────────────
-const transactionSchema = z.object({
+const transactionBaseSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_\-]+$/, 'Invalid transaction ID format').transform(sanitizeString),
   accountId: z.string().regex(/^[a-zA-Z0-9_\-]+$/, 'Invalid account ID format').transform(sanitizeString),
   toAccountId: z.string().regex(/^[a-zA-Z0-9_\-]+$/, 'Invalid destination account ID format')
@@ -92,7 +92,25 @@ const transactionSchema = z.object({
   updatedAt: z.union([z.number(), z.string().transform(Number)]).optional(),
 });
 
-const transactionUpdateSchema = transactionSchema.partial();
+const transactionSchema = transactionBaseSchema.refine((data) => {
+  if (data.type && data.type !== 'transfer' && (!data.categoryId || String(data.categoryId).trim() === '')) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Category is required for income/expense transactions',
+  path: ['categoryId'],
+});
+
+const transactionUpdateSchema = transactionBaseSchema.partial().refine((data) => {
+  if (data.type && data.type !== 'transfer' && (!data.categoryId || String(data.categoryId).trim() === '')) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Category is required for income/expense transactions',
+  path: ['categoryId'],
+});
 
 // ─── Budget schemas ───────────────────────────────────────────────────────────
 const budgetSchema = z.object({
@@ -163,6 +181,7 @@ function validate(schema) {
       return res.status(400).json({
         error: 'Validation failed',
         errors,
+        details: errors, // Backwards compatibility for the test suite
       });
     }
     req.validated = result.data;

@@ -26,9 +26,10 @@ function ForecastBar({
   percent: number;
   color: string;
 }) {
+  const { colors } = useAppTheme();
   const clamped = Math.min(percent, 100);
   return (
-    <View style={styles.barTrack}>
+    <View style={[styles.barTrack, { backgroundColor: colors.border }]}>
       <View
         style={[
           styles.barFill,
@@ -42,6 +43,7 @@ function ForecastBar({
 // ─── Category row ─────────────────────────────────────────────────────────────
 
 function CategoryRow({ item }: { item: CategoryForecast }) {
+  const { colors } = useAppTheme();
   const statusColor = getForecastStatusColor(item.status);
   const statusLabel = getForecastStatusLabel(item.status);
   const percent = item.percentOfBudget ?? 0;
@@ -49,7 +51,7 @@ function CategoryRow({ item }: { item: CategoryForecast }) {
   return (
     <View style={styles.categoryRow}>
       <View style={styles.categoryHeader}>
-        <Text style={styles.categoryName}>{item.category}</Text>
+        <Text style={[styles.categoryName, { color: colors.text }]}>{item.category}</Text>
         <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
           <Text style={[styles.statusLabel, { color: statusColor }]}>
             {statusLabel}
@@ -58,14 +60,14 @@ function CategoryRow({ item }: { item: CategoryForecast }) {
       </View>
 
       <View style={styles.categoryAmounts}>
-        <Text style={styles.spentText}>
+        <Text style={[styles.spentText, { color: colors.text }]}>
           Spent: {formatForecastAmount(item.spentSoFar)}
         </Text>
-        <Text style={styles.projectedText}>
+        <Text style={[styles.projectedText, { color: colors.text }]}>
           Projected: {formatForecastAmount(item.projectedTotal)}
         </Text>
         {item.budgetLimit !== null && (
-          <Text style={styles.budgetText}>
+          <Text style={[styles.budgetText, { color: colors.textMuted }]}>
             Budget: {formatForecastAmount(item.budgetLimit)}
           </Text>
         )}
@@ -75,7 +77,7 @@ function CategoryRow({ item }: { item: CategoryForecast }) {
         <ForecastBar percent={percent} color={statusColor} />
       )}
 
-      <Text style={styles.dailyAvg}>
+      <Text style={[styles.dailyAvg, { color: colors.textMuted }]}>
         Daily avg: {formatForecastAmount(item.dailyAverage)} ·{' '}
         {item.daysRemaining} days left
       </Text>
@@ -279,7 +281,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  categoryName: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  categoryName: { fontSize: 15, fontWeight: '600' },
   statusBadge: {
     borderRadius: 6,
     paddingHorizontal: 8,
@@ -292,19 +294,18 @@ const styles = StyleSheet.create({
     gap: 12,
     flexWrap: 'wrap',
   },
-  spentText: { fontSize: 12, color: '#374151' },
-  projectedText: { fontSize: 12, color: '#374151', fontWeight: '600' },
-  budgetText: { fontSize: 12, color: '#6B7280' },
+  spentText: { fontSize: 12 },
+  projectedText: { fontSize: 12, fontWeight: '600' },
+  budgetText: { fontSize: 12 },
 
   barTrack: {
     height: 6,
-    backgroundColor: '#E5E7EB',
     borderRadius: 3,
     overflow: 'hidden',
   },
   barFill: { height: '100%', borderRadius: 3 },
 
-  dailyAvg: { fontSize: 11, color: '#9CA3AF' },
+  dailyAvg: { fontSize: 11 },
 
   emptyCard: {
     borderRadius: 12,

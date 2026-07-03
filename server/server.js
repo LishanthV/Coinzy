@@ -48,23 +48,30 @@ app.use((err, req, res, next) => {
 
 // ─── Cleanup job ──────────────────────────────────────────────────────────────
 const { pool } = require('./db');
-setInterval(async () => {
-  try {
-    await pool.query('DELETE FROM refresh_tokens WHERE expires_at < NOW()');
-    await pool.query('DELETE FROM pending_registrations WHERE expires_at < NOW()');
-    console.log('🧹 Expired tokens cleaned');
-  } catch (err) {
-    console.error('Cleanup error:', err);
-  }
-}, 24 * 60 * 60 * 1000);
+let cleanupInterval;
+if (process.env.NODE_ENV !== 'test') {
+  cleanupInterval = setInterval(async () => {
+    try {
+      await pool.query('DELETE FROM refresh_tokens WHERE expires_at < NOW()');
+      await pool.query('DELETE FROM pending_registrations WHERE expires_at < NOW()');
+      console.log('🧹 Expired tokens cleaned');
+    } catch (err) {
+      console.error('Cleanup error:', err);
+    }
+  }, 24 * 60 * 60 * 1000);
+}
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
-runMigrations()
-  .then(() => {
-    app.listen(PORT, () => console.log(`🚀 Coinzy server running on port ${PORT}`));
-  })
-  .catch((err) => {
-    console.error('❌ Migration failed:', err);
-    process.exit(1);
-  });
+if (process.env.NODE_ENV !== 'test') {
+  runMigrations()
+    .then(() => {
+      app.listen(PORT, () => console.log(`🚀 Coinzy server running on port ${PORT}`));
+    })
+    .catch((err) => {
+      console.error('❌ Migration failed:', err);
+      process.exit(1);
+    });
+}
+
+module.exports = app;

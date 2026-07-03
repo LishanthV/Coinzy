@@ -65,10 +65,10 @@ router.post('/', authenticate, validate(schemas.transaction), async (req, res) =
 
     // Verify account belongs to user
     const [accCheck] = await conn.query(
-      'SELECT id FROM accounts WHERE id = ? AND userId = ?',
-      [accountId, req.userId]
+      'SELECT userId FROM accounts WHERE id = ?',
+      [accountId]
     );
-    if (accCheck.length === 0) {
+    if (accCheck.length === 0 || accCheck[0].userId !== req.userId) {
       await conn.rollback();
       return res.status(403).json({ error: 'Account does not belong to this user.' });
     }
@@ -93,7 +93,7 @@ router.post('/', authenticate, validate(schemas.transaction), async (req, res) =
     }
 
     await conn.commit();
-    return res.status(201).json({ id: txnId });
+    return res.status(200).json({ success: true, id: txnId });
   } catch (err) {
     await conn.rollback();
     console.error('Create transaction error:', err);

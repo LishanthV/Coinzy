@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
+const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'coinzy_secret_key_12345';
 
 function authenticate(req, res, next) {
   const header = req.headers.authorization;
@@ -10,7 +10,7 @@ function authenticate(req, res, next) {
   const token = header.slice(7);
   try {
     const decoded = jwt.verify(token, ACCESS_SECRET);
-    req.userId = decoded.userId;
+    req.userId = decoded.userId || decoded.id;
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {

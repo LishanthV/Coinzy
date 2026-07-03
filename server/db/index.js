@@ -52,12 +52,19 @@ async function runMigrations() {
     // ── users ────────────────────────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id           VARCHAR(36)  PRIMARY KEY,
-        name         VARCHAR(255) NOT NULL,
-        email        VARCHAR(255) NOT NULL UNIQUE,
-        password     VARCHAR(255) NOT NULL,
-        created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+        id                  VARCHAR(36)  PRIMARY KEY,
+        name                VARCHAR(255) NOT NULL,
+        email               VARCHAR(255) NOT NULL UNIQUE,
+        password            VARCHAR(255) NOT NULL,
+        verified            SMALLINT     DEFAULT 1,
+        "verificationToken" VARCHAR(255) NULL,
+        created_at          TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
       );
+    `);
+    await client.query(`
+      ALTER TABLE users 
+      ADD COLUMN IF NOT EXISTS verified SMALLINT DEFAULT 1,
+      ADD COLUMN IF NOT EXISTS "verificationToken" VARCHAR(255) NULL;
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`);
 

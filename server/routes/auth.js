@@ -53,6 +53,7 @@ async function sendOTPEmail(email, name, otp) {
   await apiInstance.sendTransacEmail(sendSmtpEmail);
 }
 
+// ─── Register ────────────────────────────────────────────────────────────────
 router.post('/register', authLimiter, validate(schemas.register), async (req, res) => {
   const { name, email, password } = req.validated;
   try {
@@ -86,6 +87,7 @@ router.post('/register', authLimiter, validate(schemas.register), async (req, re
   }
 });
 
+// ─── Verify OTP ──────────────────────────────────────────────────────────────
 router.post('/verify-otp', otpLimiter, async (req, res) => {
   const { email, otp } = req.body;
   if (!email || !otp) {
@@ -123,6 +125,7 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
   }
 });
 
+// ─── Resend OTP ──────────────────────────────────────────────────────────────
 router.post('/resend-otp', resendLimiter, async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required.' });
@@ -156,6 +159,7 @@ router.post('/resend-otp', resendLimiter, async (req, res) => {
   }
 });
 
+// ─── Login ───────────────────────────────────────────────────────────────────
 router.post('/login', authLimiter, validate(schemas.login), async (req, res) => {
   const { email, password } = req.validated;
   try {
@@ -178,6 +182,7 @@ router.post('/login', authLimiter, validate(schemas.login), async (req, res) => 
   }
 });
 
+// ─── Refresh Token ───────────────────────────────────────────────────────────
 router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
   const { refreshToken } = req.validated;
   try {
@@ -203,6 +208,7 @@ router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
   }
 });
 
+// ─── Logout ──────────────────────────────────────────────────────────────────
 router.post('/logout', async (req, res) => {
   const { refreshToken } = req.body;
   const header = req.headers.authorization;

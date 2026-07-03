@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -95,22 +96,29 @@ export default function OTPVerificationScreen({ route, navigation }: OTPVerifica
         return;
       }
 
-      // OTP verified — useAuthStore will handle the session
-      // Navigate to main app by updating auth state
-      const { setTokens } = useAuthStore.getState();
-
-      await setTokens(data.accessToken, data.refreshToken);
-
-      // Set user in store
-      const user = {
-        id: data.userId,
-        name: data.name,
-        email: data.email,
-        currency: 'USD',
-        avatarColor: '#7C3AED',
-      };
-      await AsyncStorage.setItem('coinzy_user', JSON.stringify(user));
-      useAuthStore.setState({ user });
+      // Show success alert, then navigate to dashboard on press
+      Alert.alert(
+        'Verification Successful',
+        'OTP Verification successful! Redirecting you to the dashboard.',
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              const { setTokens } = useAuthStore.getState();
+              await setTokens(data.accessToken, data.refreshToken);
+              const user = {
+                id: data.userId,
+                name: data.name,
+                email: data.email,
+                currency: 'USD',
+                avatarColor: '#7C3AED',
+              };
+              await AsyncStorage.setItem('coinzy_user', JSON.stringify(user));
+              useAuthStore.setState({ user });
+            }
+          }
+        ]
+      );
 
     } catch (e: any) {
       console.error('Verify OTP error:', e);

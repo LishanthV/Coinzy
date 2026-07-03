@@ -1,8 +1,8 @@
 process.env.NODE_ENV = 'test';
 require('dotenv').config();
 
-// Mock mysql2/promise BEFORE requiring app to prevent actual DB connection/migrations in tests
-jest.mock('mysql2/promise', () => {
+// Mock ../db BEFORE requiring app to prevent actual DB connection/migrations in tests
+jest.mock('../db', () => {
   const mockConnection = {
     query: jest.fn().mockImplementation((sql, params) => {
       if (sql.includes('SELECT userId FROM accounts')) {
@@ -71,8 +71,9 @@ jest.mock('mysql2/promise', () => {
   };
 
   return {
-    createConnection: jest.fn().mockResolvedValue(mockConnection),
-    createPool: jest.fn().mockReturnValue(mockPool)
+    query: mockPool.query,
+    pool: mockPool,
+    runMigrations: jest.fn().mockResolvedValue(true)
   };
 });
 

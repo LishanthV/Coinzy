@@ -13,6 +13,7 @@ interface AuthState {
   user: UserProfile | null;
   accessToken: string | null;
   refreshToken: string | null;
+  token: string | null; // Alias for accessToken used by useFinanceStore
   isLoading: boolean;
   notificationsEnabled: boolean;
 
@@ -30,6 +31,7 @@ interface AuthState {
 
   // Token management — used internally and by api()
   refreshAccessToken: () => Promise<string | null>;
+  refreshSession: () => Promise<string | null>; // Alias for refreshAccessToken used by useFinanceStore
   setTokens: (accessToken: string, refreshToken: string) => Promise<void>;
 }
 
@@ -38,6 +40,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   completeOnboarding: async () => {},
   accessToken: null,
   refreshToken: null,
+  token: null,
   isLoading: true,
   notificationsEnabled: false,
 
@@ -52,7 +55,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (accessToken && refreshToken && userJson) {
         const user = JSON.parse(userJson);
-        set({ accessToken, refreshToken, user, isLoading: false });
+        set({ accessToken, refreshToken, token: accessToken, user, isLoading: false });
       } else {
         set({ isLoading: false });
       }
@@ -66,7 +69,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       AsyncStorage.setItem(ACCESS_TOKEN_KEY, accessToken),
       AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken),
     ]);
-    set({ accessToken, refreshToken });
+    set({ accessToken, refreshToken, token: accessToken });
   },
 
   refreshAccessToken: async () => {
@@ -92,6 +95,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       return null;
     }
+  },
+
+  refreshSession: async () => {
+    return get().refreshAccessToken();
   },
 
   login: async (email, password) => {
@@ -122,7 +129,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         AsyncStorage.setItem(USER_KEY, JSON.stringify(user)),
       ]);
 
-      set({ user, accessToken: data.accessToken, refreshToken: data.refreshToken });
+      set({ user, accessToken: data.accessToken, refreshToken: data.refreshToken, token: data.accessToken });
       return { error: null };
     } catch (e: any) {
       return { error: e || new Error('Connection failed') };
@@ -157,7 +164,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         AsyncStorage.setItem(USER_KEY, JSON.stringify(user)),
       ]);
 
-      set({ user, accessToken: data.accessToken, refreshToken: data.refreshToken });
+      set({ user, accessToken: data.accessToken, refreshToken: data.refreshToken, token: data.accessToken });
       return { error: null };
     } catch (e: any) {
       return { error: e || new Error('Connection failed') };
@@ -189,7 +196,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       AsyncStorage.removeItem(USER_KEY),
     ]);
 
-    set({ user: null, accessToken: null, refreshToken: null });
+    set({ user: null, accessToken: null, refreshToken: null, token: null });
   },
 
   updateProfile: (changes) => {
