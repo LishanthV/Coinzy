@@ -3,8 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProfile } from '../types';
 import { colors } from '../theme';
 
-const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000';
-
+const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 const ACCESS_TOKEN_KEY = 'coinzy_access_token';
 const REFRESH_TOKEN_KEY = 'coinzy_refresh_token';
 const USER_KEY = 'coinzy_user';
@@ -13,25 +12,17 @@ interface AuthState {
   user: UserProfile | null;
   accessToken: string | null;
   refreshToken: string | null;
-  token: string | null; // Alias for accessToken used by useFinanceStore
   isLoading: boolean;
   notificationsEnabled: boolean;
 
-  // Init — restores session on app launch
   initAuth: () => Promise<void>;
-
-  // Auth actions
   login: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (name: string, email: string, password: string) => Promise<{ error: Error | null }>;
   logOut: () => Promise<void>;
   updateProfile: (changes: Partial<Omit<UserProfile, 'id' | 'email'>>) => void;
   setNotificationsEnabled: (enabled: boolean) => Promise<boolean>;
-
   completeOnboarding: () => Promise<void>;
-
-  // Token management — used internally and by api()
   refreshAccessToken: () => Promise<string | null>;
-  refreshSession: () => Promise<string | null>; // Alias for refreshAccessToken used by useFinanceStore
   setTokens: (accessToken: string, refreshToken: string) => Promise<void>;
 }
 
@@ -40,7 +31,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   completeOnboarding: async () => {},
   accessToken: null,
   refreshToken: null,
-  token: null,
   isLoading: true,
   notificationsEnabled: false,
 
@@ -55,7 +45,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (accessToken && refreshToken && userJson) {
         const user = JSON.parse(userJson);
-        set({ accessToken, refreshToken, token: accessToken, user, isLoading: false });
+        set({ accessToken, refreshToken, user, isLoading: false });
       } else {
         set({ isLoading: false });
       }
@@ -69,7 +59,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       AsyncStorage.setItem(ACCESS_TOKEN_KEY, accessToken),
       AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken),
     ]);
-    set({ accessToken, refreshToken, token: accessToken });
+    set({ accessToken, refreshToken });
   },
 
   refreshAccessToken: async () => {
@@ -77,14 +67,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!refreshToken) return null;
 
     try {
-      const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
       });
 
       if (!res.ok) {
-        // Refresh token is invalid or expired — force logout
         await get().logOut();
         return null;
       }
@@ -97,13 +86,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  refreshSession: async () => {
-    return get().refreshAccessToken();
-  },
-
   login: async (email, password) => {
     try {
-      const res = await fetch(`${BASE_URL}/auth/login`, {
+      const res = await fetch(`${BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -129,7 +114,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         AsyncStorage.setItem(USER_KEY, JSON.stringify(user)),
       ]);
 
-      set({ user, accessToken: data.accessToken, refreshToken: data.refreshToken, token: data.accessToken });
+      set({ user, accessToken: data.accessToken, refreshToken: data.refreshToken });
       return { error: null };
     } catch (e: any) {
       return { error: e || new Error('Connection failed') };
@@ -138,7 +123,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signUp: async (name, email, password) => {
     try {
-      const res = await fetch(`${BASE_URL}/auth/register`, {
+      const res = await fetch(`${BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password }),
@@ -149,22 +134,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return { error: new Error(err.error || 'Registration failed') };
       }
 
-      const data = await res.json();
-      const user: UserProfile = {
-        id: data.userId,
-        name: data.name,
-        email: data.email,
-        currency: 'USD',
-        avatarColor: colors.primary,
-      };
-
-      await Promise.all([
-        AsyncStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken),
-        AsyncStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken),
-        AsyncStorage.setItem(USER_KEY, JSON.stringify(user)),
-      ]);
-
-      set({ user, accessToken: data.accessToken, refreshToken: data.refreshToken, token: data.accessToken });
       return { error: null };
     } catch (e: any) {
       return { error: e || new Error('Connection failed') };
@@ -174,10 +143,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logOut: async () => {
     const { accessToken, refreshToken } = get();
 
-    // Tell server to invalidate the refresh token
     try {
       if (accessToken && refreshToken) {
-        await fetch(`${BASE_URL}/auth/logout`, {
+        await fetch(`${BASE_URL}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -196,7 +164,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       AsyncStorage.removeItem(USER_KEY),
     ]);
 
-    set({ user: null, accessToken: null, refreshToken: null, token: null });
+    set({ user: null, accessToken: null, refreshToken: null });
   },
 
   updateProfile: (changes) => {
@@ -213,7 +181,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 }));
 
-// api() — use this for ALL authenticated requests instead of raw fetch()
 export async function api(path: string, options: RequestInit = {}): Promise<Response> {
   const { accessToken, refreshAccessToken } = useAuthStore.getState();
 
@@ -229,7 +196,6 @@ export async function api(path: string, options: RequestInit = {}): Promise<Resp
 
   let res = await makeRequest(accessToken);
 
-  // If 401 with TOKEN_EXPIRED, refresh and retry once
   if (res.status === 401) {
     const body = await res.clone().json().catch(() => ({}));
     if (body.code === 'TOKEN_EXPIRED') {
