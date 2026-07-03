@@ -1,16 +1,12 @@
 import React, { useEffect } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, View, ActivityIndicator } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSecurityStore } from '../store/useSecurityStore';
-
-// Existing screens
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
 import OTPVerificationScreen from '../screens/auth/OTPVerificationScreen';
 import OnboardingScreen from '../screens/onboarding/OnboardingScreen';
 import { MainNavigator } from './MainNavigator';
-
-// New screens
 import LockScreen from '../screens/LockScreen';
 import PinSetupScreen from '../screens/PinSetupScreen';
 import TxnDetailScreen from '../screens/history/TxnDetailScreen';
@@ -18,17 +14,18 @@ import AddTransactionScreen from '../screens/transactions/AddTransactionScreen';
 import SavingsGoalsScreen from '../screens/goals/SavingsGoalsScreen';
 import SpendingForecastScreen from '../screens/SpendingForecastScreen';
 import LoanPlannerScreen from '../screens/LoanPlannerScreen';
-
 import { useAuthStore } from '../store/useAuthStore';
 import { RootStackParamList } from './types';
+import { colors } from '../theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
-  const { user } = useAuthStore();
+  const { user, isLoading, initAuth } = useAuthStore();
   const { isLocked, isLockEnabled, hasPin, initSecurity, lock } = useSecurityStore();
 
   useEffect(() => {
+    initAuth();
     initSecurity();
   }, []);
 
@@ -40,6 +37,15 @@ export function RootNavigator() {
     });
     return () => subscription.remove();
   }, [isLockEnabled, hasPin, lock]);
+
+  // Show loading spinner while restoring session
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   if (isLocked) {
     return <LockScreen />;
