@@ -26,8 +26,13 @@ export function RootNavigator() {
 
   useEffect(() => {
     initAuth();
-    initSecurity();
   }, []);
+
+  useEffect(() => {
+    if (user?.id) {
+      initSecurity(user.id);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {

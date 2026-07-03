@@ -152,7 +152,20 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_err_user ON error_logs(user_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_err_created ON error_logs(created_at);`);
 
+    // ── Device account limit tracking ──────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS device_accounts (
+        id         VARCHAR(36)  PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        device_id  TEXT         NOT NULL,
+        user_id    VARCHAR(36)  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(device_id, user_id)
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_device_accounts_device_id ON device_accounts(device_id);`);
+
     console.log('✅ PostgreSQL Migrations complete');
+
   } finally {
     client.release();
   }

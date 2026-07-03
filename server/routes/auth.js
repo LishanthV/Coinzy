@@ -53,7 +53,19 @@ async function sendOTPEmail(email, name, otp) {
 // ─── Register ────────────────────────────────────────────────────────────────
 router.post('/register', authLimiter, validate(schemas.register), async (req, res) => {
   const { name, email, password } = req.validated;
+  const deviceId = req.body.deviceId || null;
   try {
+    // Check device account limit (max 4 accounts per device)
+    if (deviceId) {
+      const { rows: deviceRows } = await pool.query(
+        'SELECT COUNT(*) as count FROM device_accounts WHERE device_id = $1',
+        [deviceId]
+      );
+      if (parseInt(deviceRows[0].count) >= 4) {
+        return res.status(403).json({ error: 'device_limit_reached', message: 'This device has reached the maximum of 4 accounts.' });
+      }
+    }
+
     const { rows: existing } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.length > 0) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
@@ -83,7 +95,7 @@ router.post('/register', authLimiter, validate(schemas.register), async (req, re
 
 // ─── Verify OTP ──────────────────────────────────────────────────────────────
 router.post('/verify-otp', otpLimiter, async (req, res) => {
-  const { email, otp } = req.body;
+  const { email, otp, deviceId } = req.body;
   if (!email || !otp) {
     return res.status(400).json({ error: 'Email and OTP are required.' });
   }
@@ -109,6 +121,16 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     const userId = crypto.randomUUID();
     await pool.query('INSERT INTO users (id, name, email, password) VALUES ($1, $2, $3, $4)', [userId, pending.name, pending.email, pending.password]);
     await pool.query('DELETE FROM pending_registrations WHERE email = $1', [email]);
+
+    // Record device-account mapping if deviceId was provided
+    if (deviceId) {
+      const deviceAccountId = crypto.randomUUID();
+      await pool.query(
+        'INSERT INTO device_accounts (id, device_id, user_id) VALUES ($1, $2, $3) ON CONFLICT (device_id, user_id) DO NOTHING',
+        [deviceAccountId, deviceId, userId]
+      );
+    }
+
     const accessToken = generateAccessToken(userId);
     const refreshToken = generateRefreshToken(userId);
     await storeRefreshToken(userId, refreshToken);

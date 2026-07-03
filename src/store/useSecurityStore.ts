@@ -2,12 +2,12 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 
-const PIN_KEY = 'coinzy_pin_hash';
-const BIOMETRIC_ENABLED_KEY = 'coinzy_biometric_enabled';
-const LOCK_ENABLED_KEY = 'coinzy_lock_enabled';
+// Per-user key helpers
+const pinKey = (userId: string) => `coinzy_pin_${userId}`;
+const biometricKey = (userId: string) => `coinzy_biometric_${userId}`;
+const lockKey = (userId: string) => `coinzy_lock_${userId}`;
 
 // Simple hash — not cryptographic, just obfuscation for local PIN storage
-// For production, use expo-crypto: Crypto.digestStringAsync(CryptoDigestAlgorithm.SHA256, pin)
 function hashPin(pin: string): string {
   let hash = 0;
   for (let i = 0; i < pin.length; i++) {
@@ -25,9 +25,10 @@ interface SecurityState {
   isBiometricAvailable: boolean;
   hasPin: boolean;
   isLoading: boolean;
+  activeUserId: string | null;
 
-  // Init — call once on app start
-  initSecurity: () => Promise<void>;
+  // Init — call once on app start with the logged-in userId
+  initSecurity: (userId: string) => Promise<void>;
 
   // PIN management
   setupPin: (pin: string) => Promise<void>;
@@ -52,14 +53,15 @@ export const useSecurityStore = create<SecurityState>((set, get) => ({
   isBiometricAvailable: false,
   hasPin: false,
   isLoading: true,
+  activeUserId: null,
 
-  initSecurity: async () => {
-    set({ isLoading: true });
+  initSecurity: async (userId: string) => {
+    set({ isLoading: true, activeUserId: userId });
     try {
       const [storedPin, biometricEnabled, lockEnabled] = await Promise.all([
-        AsyncStorage.getItem(PIN_KEY),
-        AsyncStorage.getItem(BIOMETRIC_ENABLED_KEY),
-        AsyncStorage.getItem(LOCK_ENABLED_KEY),
+        AsyncStorage.getItem(pinKey(userId)),
+        AsyncStorage.getItem(biometricKey(userId)),
+        AsyncStorage.getItem(lockKey(userId)),
       ]);
 
       const biometricAvailable = await get().checkBiometricAvailability();
@@ -70,7 +72,6 @@ export const useSecurityStore = create<SecurityState>((set, get) => ({
         isBiometricEnabled: biometricEnabled === 'true' && biometricAvailable,
         isBiometricAvailable: biometricAvailable,
         isLockEnabled,
-        // Lock the app on init if lock is enabled
         isLocked: isLockEnabled && !!storedPin,
         isLoading: false,
       });
@@ -80,22 +81,28 @@ export const useSecurityStore = create<SecurityState>((set, get) => ({
   },
 
   setupPin: async (pin: string) => {
+    const userId = get().activeUserId;
+    if (!userId) return;
     const hashed = hashPin(pin);
-    await AsyncStorage.setItem(PIN_KEY, hashed);
+    await AsyncStorage.setItem(pinKey(userId), hashed);
     set({ hasPin: true });
   },
 
   verifyPin: async (pin: string) => {
-    const stored = await AsyncStorage.getItem(PIN_KEY);
+    const userId = get().activeUserId;
+    if (!userId) return false;
+    const stored = await AsyncStorage.getItem(pinKey(userId));
     if (!stored) return false;
     return stored === hashPin(pin);
   },
 
   removePin: async () => {
+    const userId = get().activeUserId;
+    if (!userId) return;
     await Promise.all([
-      AsyncStorage.removeItem(PIN_KEY),
-      AsyncStorage.removeItem(BIOMETRIC_ENABLED_KEY),
-      AsyncStorage.setItem(LOCK_ENABLED_KEY, 'false'),
+      AsyncStorage.removeItem(pinKey(userId)),
+      AsyncStorage.removeItem(biometricKey(userId)),
+      AsyncStorage.setItem(lockKey(userId), 'false'),
     ]);
     set({ hasPin: false, isBiometricEnabled: false, isLockEnabled: false, isLocked: false });
   },
@@ -122,12 +129,16 @@ export const useSecurityStore = create<SecurityState>((set, get) => ({
   },
 
   toggleBiometric: async (enabled: boolean) => {
-    await AsyncStorage.setItem(BIOMETRIC_ENABLED_KEY, enabled.toString());
+    const userId = get().activeUserId;
+    if (!userId) return;
+    await AsyncStorage.setItem(biometricKey(userId), enabled.toString());
     set({ isBiometricEnabled: enabled });
   },
 
   toggleLock: async (enabled: boolean) => {
-    await AsyncStorage.setItem(LOCK_ENABLED_KEY, enabled.toString());
+    const userId = get().activeUserId;
+    if (!userId) return;
+    await AsyncStorage.setItem(lockKey(userId), enabled.toString());
     set({ isLockEnabled: enabled });
   },
 

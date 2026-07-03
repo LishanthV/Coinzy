@@ -13,6 +13,7 @@ import {
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../../store/useAuthStore';
+import { getDeviceId } from '../../utils/deviceId';
 
 const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
@@ -81,10 +82,11 @@ export default function OTPVerificationScreen({ route, navigation }: OTPVerifica
     setError('');
 
     try {
+      const deviceId = await getDeviceId();
       const res = await fetch(`${BASE_URL}/api/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp: otpCode }),
+        body: JSON.stringify({ email, otp: otpCode, deviceId }),
       });
 
       const data = await res.json();

@@ -14,6 +14,7 @@ import { Button, FormInput } from '../../components/ui';
 import { colors, fonts, fontSizes, spacing, radii } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/useAuthStore';
+import { getDeviceId } from '../../utils/deviceId';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'SignUp'>;
 
@@ -53,14 +54,21 @@ export default function SignUpScreen() {
 
     try {
       const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+      const deviceId = await getDeviceId();
       const res = await fetch(`${BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), password: password.trim() }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), password: password.trim(), deviceId }),
       });
       const data = await res.json();
       if (!res.ok) {
-        if (res.status === 409) {
+        if (res.status === 403 && data.error === 'device_limit_reached') {
+          Alert.alert(
+            '📵 Device Limit Reached',
+            'This device already has 4 accounts registered. You cannot create more accounts on this device.',
+            [{ text: 'OK', style: 'cancel' }]
+          );
+        } else if (res.status === 409) {
           Alert.alert(
             'User Already Created',
             'An account with this email already exists. Please log in instead.',
