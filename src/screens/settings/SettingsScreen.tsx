@@ -16,6 +16,7 @@ import { formatCurrency } from '../../utils/format';
 import { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import * as ImagePicker from 'expo-image-picker';
 import SecuritySection from './SecuritySection';
+import VersionBadge from '../../components/VersionBadge';
 
 
 type Nav = CompositeNavigationProp<
@@ -420,6 +421,7 @@ export default function SettingsScreen() {
           <Text style={styles.footerSubtext}>
             Your data is stored locally and securely synchronized with the Coinzy cloud backend.
           </Text>
+          <VersionBadge />
         </View>
       </Screen>
     </SafeAreaView>

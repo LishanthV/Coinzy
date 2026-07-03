@@ -12,6 +12,7 @@ import { useAuthStore } from './src/store/useAuthStore';
 import { scheduleDailyNotification, cancelDailyNotification } from './src/utils/notifications';
 import { useFinanceStore } from './src/store/useFinanceStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import UpdateBanner from './src/components/UpdateBanner';
 
 import { logger } from './src/utils/logger';
 
@@ -99,6 +100,7 @@ export default function App() {
             <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
             <RootNavigator />
           </NavigationContainer>
+          <UpdateBanner />
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
