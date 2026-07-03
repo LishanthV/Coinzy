@@ -7,12 +7,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const darkColors = {
   // Surfaces
-  bg: '#0B0E14',
-  surface: '#141923',
-  surfaceAlt: '#1C2330',
-  surfaceRaised: '#232B3B',
-  border: '#2A3340',
-  borderSoft: '#1E2530',
+  bg: '#0F172A',
+  surface: '#1E293B',
+  surfaceAlt: '#263348',
+  surfaceRaised: '#2D3D54',
+  border: '#334155',
+  borderSoft: '#1E293B',
 
   // Brand
   primary: '#6C6FE0',
@@ -34,9 +34,9 @@ export const darkColors = {
   green: '#7CB35C',
 
   // Text
-  text: '#F4F6F9',
-  textMuted: '#9AA3B5',
-  textFaint: '#5C6678',
+  text: '#F1F5F9',
+  textMuted: '#94A3B8',
+  textFaint: '#64748B',
 
   // Utility
   danger: '#E2784E',
@@ -47,12 +47,12 @@ export const darkColors = {
 
 export const lightColors = {
   // Surfaces
-  bg: '#F8F9FA',
+  bg: '#F8FAFC',
   surface: '#FFFFFF',
-  surfaceAlt: '#E9ECEF',
-  surfaceRaised: '#DEE2E6',
-  border: '#CED4DA',
-  borderSoft: '#E9ECEF',
+  surfaceAlt: '#F1F5F9',
+  surfaceRaised: '#E2E8F0',
+  border: '#CBD5E1',
+  borderSoft: '#E2E8F0',
 
   // Brand
   primary: '#5052C0',
@@ -74,9 +74,9 @@ export const lightColors = {
   green: '#51CF66',
 
   // Text
-  text: '#212529',
-  textMuted: '#495057',
-  textFaint: '#ADB5BD',
+  text: '#0F172A',
+  textMuted: '#475569',
+  textFaint: '#94A3B8',
 
   // Utility
   danger: '#FA5252',

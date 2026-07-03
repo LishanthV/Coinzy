@@ -2,7 +2,7 @@
   "expo": {
     "name": "Coinzy",
     "slug": "coinzy",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -16,7 +16,11 @@
       "bundleIdentifier": "com.coinzy.app"
     },
     "android": {
-      "package": "com.coinzy.app"
+      "package": "com.coinzy.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#060814"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
