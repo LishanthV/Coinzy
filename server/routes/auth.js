@@ -22,7 +22,7 @@ async function storeRefreshToken(userId, token) {
   const id = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   await pool.query(
-    'INSERT INTO refresh_tokens (id, "userId", token, expires_at) VALUES ($1, $2, $3, $4)',
+    'INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES ($1, $2, $3, $4)',
     [id, userId, token, expiresAt]
   );
 }
@@ -32,10 +32,8 @@ async function sendOTPEmail(email, name, otp) {
   const defaultClient = SibApiV3Sdk.ApiClient.instance;
   const apiKey = defaultClient.authentications['api-key'];
   apiKey.apiKey = process.env.BREVO_API_KEY;
-
   const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
   const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-
   sendSmtpEmail.subject = 'Your Coinzy Verification Code';
   sendSmtpEmail.htmlContent = `
     <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
@@ -49,7 +47,6 @@ async function sendOTPEmail(email, name, otp) {
   `;
   sendSmtpEmail.sender = { name: 'Coinzy', email: 'coinzy05@gmail.com' };
   sendSmtpEmail.to = [{ email: email, name: name }];
-
   await apiInstance.sendTransacEmail(sendSmtpEmail);
 }
 
@@ -57,16 +54,13 @@ async function sendOTPEmail(email, name, otp) {
 router.post('/register', authLimiter, validate(schemas.register), async (req, res) => {
   const { name, email, password } = req.validated;
   try {
-    const [existing] = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const { rows: existing } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.length > 0) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
     const hashedPassword = await bcrypt.hash(password, 12);
     const otp = otpGenerator.generate(6, {
-      digits: true,
-      lowerCaseAlphabets: false,
-      upperCaseAlphabets: false,
-      specialChars: false,
+      digits: true, lowerCaseAlphabets: false, upperCaseAlphabets: false, specialChars: false,
     });
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     const id = crypto.randomUUID();
@@ -94,7 +88,7 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Email and OTP are required.' });
   }
   try {
-    const [rows] = await pool.query('SELECT * FROM pending_registrations WHERE email = $1', [email]);
+    const { rows } = await pool.query('SELECT * FROM pending_registrations WHERE email = $1', [email]);
     if (rows.length === 0) {
       return res.status(400).json({ error: 'No pending registration found. Please register again.' });
     }
@@ -130,7 +124,7 @@ router.post('/resend-otp', resendLimiter, async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required.' });
   try {
-    const [rows] = await pool.query('SELECT * FROM pending_registrations WHERE email = $1', [email]);
+    const { rows } = await pool.query('SELECT * FROM pending_registrations WHERE email = $1', [email]);
     if (rows.length === 0) {
       return res.status(400).json({ error: 'No pending registration found. Please register again.' });
     }
@@ -163,7 +157,7 @@ router.post('/resend-otp', resendLimiter, async (req, res) => {
 router.post('/login', authLimiter, validate(schemas.login), async (req, res) => {
   const { email, password } = req.validated;
   try {
-    const [rows] = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (rows.length === 0) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
@@ -192,7 +186,7 @@ router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
     } catch {
       return res.status(401).json({ error: 'Invalid or expired refresh token.' });
     }
-    const [rows] = await pool.query('SELECT * FROM refresh_tokens WHERE "userId" = $1 AND expires_at > NOW()', [decoded.userId]);
+    const { rows } = await pool.query('SELECT * FROM refresh_tokens WHERE user_id = $1 AND expires_at > NOW()', [decoded.userId]);
     const match = rows.find((r) => r.token === refreshToken);
     if (!match) {
       return res.status(401).json({ error: 'Refresh token not recognised.' });
