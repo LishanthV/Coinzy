@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Alert } from '../../utils/alerts';
+import { Pressable, StyleSheet, Text, View, Alert as RNAlert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,7 +29,7 @@ export default function ExportScreen() {
   const user = useAuthStore((s) => s.user);
   const currency = user?.currency ?? 'INR';
 
-  const [range, setRange] = useState('30');
+  const [range, setRange] = useState('all');
   const [exporting, setExporting] = useState(false);
 
   const categoryById = Object.fromEntries(categories.map((c) => [c.id, c]));
@@ -60,20 +59,23 @@ export default function ExportScreen() {
   };
 
   const onExport = async () => {
+    if (sorted.length === 0) {
+      RNAlert.alert('No transactions', 'No transactions found in the selected date range.');
+      return;
+    }
     setExporting(true);
     try {
       const csv = buildCsv();
       const fileUri = `${FileSystem.cacheDirectory}coinzy-export-${Date.now()}.csv`;
       await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
-
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export transactions' });
       } else {
-        Alert.alert('Export ready', `Saved to: ${fileUri}`);
+        RNAlert.alert('Export ready', `File saved to: ${fileUri}`);
       }
-    } catch (e) {
-      Alert.alert('Export failed', 'Something went wrong while preparing your file.');
+    } catch (e: any) {
+      RNAlert.alert('Export failed', e?.message || 'Something went wrong while preparing your file.');
     } finally {
       setExporting(false);
     }
@@ -91,8 +93,7 @@ export default function ExportScreen() {
 
       <Screen contentStyle={{ paddingTop: spacing.sm }}>
         <Text style={styles.subtitle}>
-          Export your transactions as a CSV file you can open in Excel, Sheets, or Numbers — or share
-          straight to your accountant.
+          Export your transactions as a CSV file you can open in Excel, Sheets, or Numbers.
         </Text>
 
         <SectionHeader title="Date range" />
@@ -138,10 +139,9 @@ export default function ExportScreen() {
         </Card>
 
         <Button
-          label="Export & share CSV"
+          label={`Export ${sorted.length} transactions as CSV`}
           onPress={onExport}
           loading={exporting}
-          disabled={sorted.length === 0}
           style={{ marginTop: spacing.xl }}
         />
         <Text style={styles.footnote}>
