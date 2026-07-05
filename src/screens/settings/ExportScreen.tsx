@@ -4,7 +4,7 @@ import { Alert } from '../../utils/alerts';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Screen, SectionHeader, Card, Button } from '../../components/ui';
@@ -28,7 +28,7 @@ export default function ExportScreen() {
   const categories = useFinanceStore((s) => s.categories);
   const accounts = useFinanceStore((s) => s.accounts);
   const user = useAuthStore((s) => s.user);
-  const currency = user?.currency ?? 'USD';
+  const currency = user?.currency ?? 'INR';
 
   const [range, setRange] = useState('30');
   const [exporting, setExporting] = useState(false);
@@ -53,7 +53,7 @@ export default function ExportScreen() {
       t.type,
       t.categoryId ? categoryById[t.categoryId]?.name ?? '' : 'Transfer',
       accountById[t.accountId]?.name ?? '',
-      t.note.replace(/,/g, ';'),
+      (t.note || '').replace(/,/g, ';'),
       (t.type === 'expense' ? -t.amount : t.amount).toFixed(2),
     ]);
     return [header, ...rows].map((r) => r.join(',')).join('\n');
@@ -64,7 +64,7 @@ export default function ExportScreen() {
     try {
       const csv = buildCsv();
       const fileUri = `${FileSystem.cacheDirectory}coinzy-export-${Date.now()}.csv`;
-      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: 'utf8' });
+      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
 
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
@@ -129,8 +129,12 @@ export default function ExportScreen() {
               {idx < Math.min(sorted.length, 6) - 1 && <View style={styles.divider} />}
             </View>
           ))}
-          {sorted.length > 6 && <Text style={styles.moreText}>+ {sorted.length - 6} more rows in the file</Text>}
-          {sorted.length === 0 && <Text style={styles.moreText}>No transactions in this range.</Text>}
+          {sorted.length > 6 && (
+            <Text style={styles.moreText}>+ {sorted.length - 6} more rows in the file</Text>
+          )}
+          {sorted.length === 0 && (
+            <Text style={styles.moreText}>No transactions in this range.</Text>
+          )}
         </Card>
 
         <Button
@@ -141,8 +145,7 @@ export default function ExportScreen() {
           style={{ marginTop: spacing.xl }}
         />
         <Text style={styles.footnote}>
-          A PDF report layout can be added once the design is finalized — CSV gives you the raw data
-          today.
+          Opens your share sheet — save to Files, email to yourself, or open in Google Sheets directly.
         </Text>
       </Screen>
     </SafeAreaView>
