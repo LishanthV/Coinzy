@@ -83,7 +83,7 @@ const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000
 
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   const authStore = require('./useAuthStore').useAuthStore;
-  let token = authStore.getState().token; // This is the access token
+  let token = authStore.getState().accessToken; // This is the access token
 
   const headers = {
     'Content-Type': 'application/json',
@@ -97,10 +97,10 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   // If access token is invalid/expired (401), try to refresh
   if (response.status === 401 && authStore.getState().refreshToken) {
     console.log('[Finance Store] Access token expired (401), attempting to refresh session...');
-    const refreshed = await authStore.getState().refreshSession();
+    const refreshed = await authStore.getState().refreshAccessToken();
     if (refreshed) {
       // Retry request with the new access token
-      const newToken = authStore.getState().token;
+      const newToken = authStore.getState().accessToken;
       const retriedHeaders = {
         ...headers,
         'Authorization': newToken ? `Bearer ${newToken}` : '',
