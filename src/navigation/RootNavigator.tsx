@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { AppState, AppStateStatus, View, ActivityIndicator } from 'react-native';
+import UpdateBanner from '../components/UpdateBanner';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSecurityStore } from '../store/useSecurityStore';
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -57,41 +58,45 @@ export function RootNavigator() {
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {!user ? (
-        <>
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="SignUp" component={SignUpScreen} />
-          <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
-        </>
-      ) : (
-        <>
-          <Stack.Screen name="Main" component={MainNavigator} />
-          <Stack.Screen name="TxnDetail" component={TxnDetailScreen} />
-          <Stack.Screen name="AddTransaction" component={AddTransactionScreen} />
-          <Stack.Screen
-            name="PinSetup"
-            component={PinSetupScreen}
-            options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-          />
-          <Stack.Screen
-            name="SavingsGoals"
-            component={SavingsGoalsScreen}
-            options={{ animation: 'slide_from_right' }}
-          />
-          <Stack.Screen
-            name="SpendingForecast"
-            component={SpendingForecastScreen}
-            options={{ animation: 'slide_from_right' }}
-          />
-          <Stack.Screen
-            name="LoanPlanner"
-            component={LoanPlannerScreen}
-            options={{ animation: 'slide_from_right' }}
-          />
-        </>
-      )}
-    </Stack.Navigator>
+    <View style={{ flex: 1 }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!user ? (
+          <>
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="SignUp" component={SignUpScreen} />
+            <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
+          </>
+        ) : (
+          <>
+            <Stack.Screen name="Main" component={MainNavigator} />
+            <Stack.Screen name="TxnDetail" component={TxnDetailScreen} />
+            <Stack.Screen name="AddTransaction" component={AddTransactionScreen} />
+            <Stack.Screen
+              name="PinSetup"
+              component={PinSetupScreen}
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="SavingsGoals"
+              component={SavingsGoalsScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="SpendingForecast"
+              component={SpendingForecastScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="LoanPlanner"
+              component={LoanPlannerScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
+          </>
+        )}
+      </Stack.Navigator>
+      {/* Update banner floats above all screens when user is logged in */}
+      {user && <UpdateBanner />}
+    </View>
   );
 }
