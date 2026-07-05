@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import 'react-native-get-random-values';
+
 
 const DEVICE_ID_KEY = 'coinzy_device_id';
 
