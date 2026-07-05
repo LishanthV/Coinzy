@@ -458,7 +458,8 @@ export const useFinanceStore = create<FinanceState>()(
 
           const serverAccounts = await accountsRes.json();
           const serverBudgets = await budgetsRes.json();
-          const serverTransactions = await transactionsRes.json();
+          const transactionsData = await transactionsRes.json();
+          const serverTransactions = Array.isArray(transactionsData) ? transactionsData : (transactionsData.data || []);
           const serverGoals = await goalsRes.json();
 
           // Load local cache to compare timestamps
@@ -501,7 +502,8 @@ export const useFinanceStore = create<FinanceState>()(
                   fetchWithAuth(`${backendUrl}/api/accounts`, { headers: overrideHeaders }),
                 ]);
                 if (refetchedTxns.ok && refetchedAccs.ok) {
-                  const txns = await refetchedTxns.json();
+                  const txnsData = await refetchedTxns.json();
+                  const txns = Array.isArray(txnsData) ? txnsData : (txnsData.data || []);
                   const accs = await refetchedAccs.json();
                   set({ transactions: txns, accounts: accs });
                 }
