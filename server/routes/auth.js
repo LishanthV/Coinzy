@@ -137,10 +137,10 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
 
     // Seed default accounts for new user
     const defaultAccounts = [
-      { id: `acc_checking_${userId}`, name: 'Everyday Checking', type: 'checking', balance: 0, color: '#7C3AED', icon: 'card-outline', currency: 'INR' },
-      { id: `acc_savings_${userId}`, name: 'Savings', type: 'savings', balance: 0, color: '#10B981', icon: 'wallet-outline', currency: 'INR' },
-      { id: `acc_credit_${userId}`, name: 'Visa Credit Card', type: 'credit', balance: 0, color: '#EF4444', icon: 'card', currency: 'INR' },
-      { id: `acc_cash_${userId}`, name: 'Cash', type: 'cash', balance: 0, color: '#F59E0B', icon: 'cash-outline', currency: 'INR' },
+      { id: crypto.randomUUID(), name: 'Everyday Checking', type: 'checking', balance: 0, color: '#7C3AED', icon: 'card-outline', currency: 'INR' },
+      { id: crypto.randomUUID(), name: 'Savings', type: 'savings', balance: 0, color: '#10B981', icon: 'wallet-outline', currency: 'INR' },
+      { id: crypto.randomUUID(), name: 'Visa Credit Card', type: 'credit', balance: 0, color: '#EF4444', icon: 'card', currency: 'INR' },
+      { id: crypto.randomUUID(), name: 'Cash', type: 'cash', balance: 0, color: '#F59E0B', icon: 'cash-outline', currency: 'INR' },
     ];
     for (const acc of defaultAccounts) {
       await pool.query(
