@@ -134,6 +134,21 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     const accessToken = generateAccessToken(userId);
     const refreshToken = generateRefreshToken(userId);
     await storeRefreshToken(userId, refreshToken);
+
+    // Seed default accounts for new user
+    const defaultAccounts = [
+      { id: `acc_checking_${userId}`, name: 'Everyday Checking', type: 'checking', balance: 0, color: '#7C3AED', icon: 'card-outline', currency: 'INR' },
+      { id: `acc_savings_${userId}`, name: 'Savings', type: 'savings', balance: 0, color: '#10B981', icon: 'wallet-outline', currency: 'INR' },
+      { id: `acc_credit_${userId}`, name: 'Visa Credit Card', type: 'credit', balance: 0, color: '#EF4444', icon: 'card', currency: 'INR' },
+      { id: `acc_cash_${userId}`, name: 'Cash', type: 'cash', balance: 0, color: '#F59E0B', icon: 'cash-outline', currency: 'INR' },
+    ];
+    for (const acc of defaultAccounts) {
+      await pool.query(
+        'INSERT INTO accounts (id, user_id, name, type, balance, color, icon, currency) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING',
+        [acc.id, userId, acc.name, acc.type, acc.balance, acc.color, acc.icon, acc.currency]
+      );
+    }
+
     return res.status(201).json({ accessToken, refreshToken, userId, name: pending.name, email: pending.email });
   } catch (err) {
     console.error('Verify OTP error:', err);

@@ -17,8 +17,8 @@ export const defaultCategories: Category[] = [
 ];
 
 export const defaultAccounts: Account[] = [
-  { id: 'acc_checking', name: 'Everyday Checking', type: 'checking', balance: 0.00, currency: 'USD', color: colors.primary, icon: 'card-outline' },
-  { id: 'acc_savings', name: 'Savings', type: 'savings', balance: 0.00, currency: 'USD', color: colors.income, icon: 'wallet-outline' },
-  { id: 'acc_credit', name: 'Visa Credit Card', type: 'credit', balance: 0.00, currency: 'USD', color: colors.expense, icon: 'card' },
-  { id: 'acc_cash', name: 'Cash', type: 'cash', balance: 0.00, currency: 'USD', color: colors.amber, icon: 'cash-outline' },
+  { id: 'acc_checking', name: 'Everyday Checking', type: 'checking', balance: 0.00, currency: 'INR', color: colors.primary, icon: 'card-outline' },
+  { id: 'acc_savings', name: 'Savings', type: 'savings', balance: 0.00, currency: 'INR', color: colors.income, icon: 'wallet-outline' },
+  { id: 'acc_credit', name: 'Visa Credit Card', type: 'credit', balance: 0.00, currency: 'INR', color: colors.expense, icon: 'card' },
+  { id: 'acc_cash', name: 'Cash', type: 'cash', balance: 0.00, currency: 'INR', color: colors.amber, icon: 'cash-outline' },
 ];
