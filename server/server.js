@@ -13,6 +13,7 @@ const { validate, schemas } = require('./validation');
 const app = express();
 
 // ─── Global middleware ────────────────────────────────────────────────────────
+app.use(require('helmet')());
 app.use(cors({
   origin: [
     'https://coinzy-badr.onrender.com',
