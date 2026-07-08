@@ -12,12 +12,18 @@
     "preview": {
       "distribution": "internal",
       "environment": "preview",
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://coinzy-badr.onrender.com"
+      }
     },
     "production": {
       "autoIncrement": true,
       "environment": "production",
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://coinzy-badr.onrender.com"
+      }
     }
   },
   "submit": {

@@ -104,7 +104,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         id: data.userId,
         name: data.name,
         email: data.email,
-        currency: 'USD',
+        currency: data.currency || 'INR',
         avatarColor: colors.primary,
       };
 
