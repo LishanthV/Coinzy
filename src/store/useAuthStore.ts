@@ -185,7 +185,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 }));
 
 export async function api(path: string, options: RequestInit = {}): Promise<Response> {
-  const { accessToken, refreshAccessToken } = useAuthStore.getState();
+  const { accessToken, refreshAccessToken, logOut } = useAuthStore.getState();
 
   const makeRequest = (token: string | null) =>
     fetch(`${BASE_URL}${path}`, {
@@ -205,7 +205,17 @@ export async function api(path: string, options: RequestInit = {}): Promise<Resp
       const newToken = await refreshAccessToken();
       if (newToken) {
         res = await makeRequest(newToken);
+        if (res.status === 401) {
+          console.warn('[api] Session still 401 after token refresh, logging out...');
+          await logOut();
+        }
+      } else {
+        console.warn('[api] Token refresh failed, logging out...');
+        await logOut();
       }
+    } else {
+      console.warn('[api] Received 401 with code:', body.code, '- logging out...');
+      await logOut();
     }
   }
 

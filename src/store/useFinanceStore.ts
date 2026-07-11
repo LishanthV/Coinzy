@@ -94,22 +94,32 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
 
   let response = await fetch(url, { ...options, headers });
 
-  // If access token is invalid/expired (401), try to refresh
-  if (response.status === 401 && authStore.getState().refreshToken) {
-    console.log('[Finance Store] Access token expired (401), attempting to refresh session...');
-    const refreshed = await authStore.getState().refreshAccessToken();
-    if (refreshed) {
-      // Retry request with the new access token
-      const newToken = authStore.getState().accessToken;
-      const retriedHeaders = {
-        ...headers,
-        'Authorization': newToken ? `Bearer ${newToken}` : '',
-      };
-      console.log('[Finance Store] Token refreshed successfully, retrying original request...');
-      response = await fetch(url, { ...options, headers: retriedHeaders });
+  if (response.status === 401) {
+    const responseClone = response.clone();
+    const body = await responseClone.json().catch(() => ({}));
+
+    if (body.code === 'TOKEN_EXPIRED' && authStore.getState().refreshToken) {
+      console.log('[Finance Store] Access token expired (401), attempting to refresh session...');
+      const refreshed = await authStore.getState().refreshAccessToken();
+      if (refreshed) {
+        // Retry request with the new access token
+        const newToken = authStore.getState().accessToken;
+        const retriedHeaders = {
+          ...headers,
+          'Authorization': newToken ? `Bearer ${newToken}` : '',
+        };
+        console.log('[Finance Store] Token refreshed successfully, retrying original request...');
+        response = await fetch(url, { ...options, headers: retriedHeaders });
+        if (response.status === 401) {
+          console.warn('[Finance Store] Request still 401 after refresh, logging out...');
+          await authStore.getState().logOut();
+        }
+      } else {
+        console.warn('[Finance Store] Token refresh failed, logging out user...');
+        await authStore.getState().logOut();
+      }
     } else {
-      // Refresh failed, logout user
-      console.warn('[Finance Store] Token refresh failed, logging out user...');
+      console.warn('[Finance Store] Received 401 (non-refreshable or refresh failed), logging out...');
       await authStore.getState().logOut();
     }
   }
