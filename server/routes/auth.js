@@ -256,3 +256,112 @@ router.post('/logout', async (req, res) => {
 });
 
 module.exports = router;
+// ─── Forgot Password ──────────────────────────────────────────────────────────
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required.' });
+  try {
+    const [rows] = await pool.query('SELECT id, name FROM users WHERE email = $1', [email]);
+    if (rows.length === 0) {
+      return res.status(200).json({ message: 'If this email exists, a reset code has been sent.' });
+    }
+    const user = rows[0];
+    const otp = otpGenerator.generate(6, { digits: true, lowerCaseAlphabets: false, upperCaseAlphabets: false, specialChars: false });
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await pool.query(
+      `INSERT INTO password_resets (user_id, otp, expires_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id) DO UPDATE SET otp = EXCLUDED.otp, expires_at = EXCLUDED.expires_at, attempts = 0`,
+      [user.id, otp, expiresAt]
+    );
+
+    const SibApiV3Sdk = require('sib-api-v3-sdk');
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    const apiKey = defaultClient.authentications['api-key'];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.subject = 'Coinzy Password Reset Code';
+    sendSmtpEmail.htmlContent = `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
+        <h2 style="color:#6366f1">Coinzy</h2>
+        <p>Hi ${user.name},</p>
+        <p>Your password reset code is:</p>
+        <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#6366f1;margin:24px 0">${otp}</div>
+        <p style="color:#666">This code expires in <strong>10 minutes</strong>.</p>
+        <p style="color:#999;font-size:12px">If you didn't request this, ignore this email.</p>
+      </div>
+    `;
+    sendSmtpEmail.sender = { name: 'Coinzy', email: 'coinzy05@gmail.com' };
+    sendSmtpEmail.to = [{ email: email, name: user.name }];
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
+
+    return res.status(200).json({ message: 'If this email exists, a reset code has been sent.' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    return res.status(500).json({ error: 'Failed to send reset code.' });
+  }
+});
+
+// ─── Verify Reset OTP ─────────────────────────────────────────────────────────
+router.post('/verify-reset-otp', async (req, res) => {
+  const { email, otp } = req.body;
+  if (!email || !otp) return res.status(400).json({ error: 'Email and OTP are required.' });
+  try {
+    const [userRows] = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (userRows.length === 0) return res.status(400).json({ error: 'Invalid request.' });
+    const userId = userRows[0].id;
+
+    const [rows] = await pool.query('SELECT * FROM password_resets WHERE user_id = $1', [userId]);
+    if (rows.length === 0) return res.status(400).json({ error: 'No reset request found. Please request a new code.' });
+    const reset = rows[0];
+
+    if (new Date() > new Date(reset.expires_at)) {
+      await pool.query('DELETE FROM password_resets WHERE user_id = $1', [userId]);
+      return res.status(400).json({ error: 'Code has expired. Please request a new one.' });
+    }
+    if (reset.attempts >= 5) {
+      await pool.query('DELETE FROM password_resets WHERE user_id = $1', [userId]);
+      return res.status(400).json({ error: 'Too many attempts. Please request a new code.' });
+    }
+    if (reset.otp !== String(otp).trim()) {
+      await pool.query('UPDATE password_resets SET attempts = attempts + 1 WHERE user_id = $1', [userId]);
+      const remaining = 5 - (reset.attempts + 1);
+      return res.status(400).json({ error: `Incorrect code. ${remaining} attempt(s) remaining.` });
+    }
+
+    const resetToken = require('crypto').randomBytes(32).toString('hex');
+    await pool.query('UPDATE password_resets SET reset_token = $1 WHERE user_id = $2', [resetToken, userId]);
+    return res.status(200).json({ resetToken });
+  } catch (err) {
+    console.error('Verify reset OTP error:', err);
+    return res.status(500).json({ error: 'Verification failed.' });
+  }
+});
+
+// ─── Reset Password ───────────────────────────────────────────────────────────
+router.post('/reset-password', async (req, res) => {
+  const { email, resetToken, newPassword } = req.body;
+  if (!email || !resetToken || !newPassword) return res.status(400).json({ error: 'All fields are required.' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  try {
+    const [userRows] = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (userRows.length === 0) return res.status(400).json({ error: 'Invalid request.' });
+    const userId = userRows[0].id;
+
+    const [rows] = await pool.query('SELECT * FROM password_resets WHERE user_id = $1 AND reset_token = $2', [userId, resetToken]);
+    if (rows.length === 0) return res.status(400).json({ error: 'Invalid or expired reset token.' });
+
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, userId]);
+    await pool.query('DELETE FROM password_resets WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM refresh_tokens WHERE "userId" = $1', [userId]);
+
+    return res.status(200).json({ message: 'Password reset successfully.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    return res.status(500).json({ error: 'Failed to reset password.' });
+  }
+});

@@ -164,6 +164,15 @@ async function runMigrations() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_device_accounts_device_id ON device_accounts(device_id);`);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_resets (
+        user_id    VARCHAR(36) PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        otp        VARCHAR(6)  NOT NULL,
+        reset_token VARCHAR(64) NULL,
+        attempts   SMALLINT    DEFAULT 0,
+        expires_at TIMESTAMP   NOT NULL
+      );
+    `);
     console.log('✅ PostgreSQL Migrations complete');
 
   } finally {
