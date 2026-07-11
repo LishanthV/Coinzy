@@ -46,6 +46,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (accessToken && refreshToken && userJson) {
         const user = JSON.parse(userJson);
         set({ accessToken, refreshToken, user, isLoading: false });
+
+        // Verify the user still exists on the server
+        try {
+          const res = await fetch(`${BASE_URL}/api/user`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (res.status === 401 || res.status === 404) {
+            // Token invalid or user no longer exists — force logout
+            await get().logOut();
+          }
+        } catch {
+          // Network error — keep user logged in with cached data (offline mode)
+        }
       } else {
         set({ isLoading: false });
       }

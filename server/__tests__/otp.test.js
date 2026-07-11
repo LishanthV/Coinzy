@@ -28,29 +28,29 @@ jest.mock('../db', () => {
   const usersDb = {};
 
   const queryMock = jest.fn().mockImplementation((sql, params) => {
-    if (sql.includes('SELECT * FROM pending_registrations WHERE email = ?')) {
+    if (sql.includes('SELECT * FROM pending_registrations WHERE email =')) {
       const email = params[0];
       const row = pendingDb[email];
-      return Promise.resolve([row ? [{ ...row }] : []]);
+      return Promise.resolve({ rows: row ? [{ ...row }] : [] });
     }
-    if (sql.includes('DELETE FROM pending_registrations WHERE email = ?')) {
+    if (sql.includes('DELETE FROM pending_registrations WHERE email =')) {
       const email = params[0];
       delete pendingDb[email];
-      return Promise.resolve([[]]);
+      return Promise.resolve({ rows: [] });
     }
-    if (sql.includes('UPDATE pending_registrations SET otp_attempts = otp_attempts + 1 WHERE email = ?')) {
+    if (sql.includes('UPDATE pending_registrations SET otp_attempts = otp_attempts + 1')) {
       const email = params[0];
       if (pendingDb[email]) {
         pendingDb[email].otp_attempts += 1;
       }
-      return Promise.resolve([[]]);
+      return Promise.resolve({ rows: [] });
     }
     if (sql.includes('INSERT INTO users (id, name, email, password)')) {
       const [id, name, email, password] = params;
       usersDb[email] = { id, name, email, password };
-      return Promise.resolve([[]]);
+      return Promise.resolve({ rows: [] });
     }
-    if (sql.includes('UPDATE pending_registrations SET otp = ?, otp_attempts = 0, resend_count = resend_count + 1')) {
+    if (sql.includes('UPDATE pending_registrations SET otp =') && sql.includes('resend_count = resend_count + 1')) {
       const [otp, expiresAt, email] = params;
       if (pendingDb[email]) {
         pendingDb[email].otp = otp;
@@ -59,9 +59,9 @@ jest.mock('../db', () => {
         pendingDb[email].last_resend = new Date().toISOString();
         pendingDb[email].expires_at = expiresAt;
       }
-      return Promise.resolve([[]]);
+      return Promise.resolve({ rows: [] });
     }
-    return Promise.resolve([[]]);
+    return Promise.resolve({ rows: [] });
   });
 
   return {

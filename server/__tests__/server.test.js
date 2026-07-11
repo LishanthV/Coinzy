@@ -5,18 +5,18 @@ require('dotenv').config();
 jest.mock('../db', () => {
   const mockConnection = {
     query: jest.fn().mockImplementation((sql, params) => {
-      if (sql.includes('SELECT userId FROM accounts')) {
-        return Promise.resolve([[{ userId: 'usr_test123' }]]);
+      if (sql.includes('SELECT user_id FROM accounts')) {
+        return Promise.resolve({ rows: [{ user_id: 'usr_test123' }] });
       }
       if (sql.includes('SELECT * FROM transactions')) {
-        return Promise.resolve([[
-          { id: 'txn_1', userId: 'usr_test123', accountId: 'acc_checking', type: 'expense', amount: 25.50, date: '2026-06-25T12:00:00Z', note: 'Whole Foods', updatedAt: Date.now() }
-        ]]);
+        return Promise.resolve({ rows: [
+          { id: 'txn_1', user_id: 'usr_test123', account_id: 'acc_checking', type: 'expense', amount: 25.50, date: '2026-06-25T12:00:00Z', note: 'Whole Foods', updated_at: Date.now() }
+        ]});
       }
       if (sql.includes('SELECT * FROM transaction_items')) {
-        return Promise.resolve([[]]);
+        return Promise.resolve({ rows: [] });
       }
-      return Promise.resolve([[]]);
+      return Promise.resolve({ rows: [] });
     }),
     beginTransaction: jest.fn().mockResolvedValue(true),
     commit: jest.fn().mockResolvedValue(true),
@@ -27,45 +27,31 @@ jest.mock('../db', () => {
 
   const mockPool = {
     query: jest.fn().mockImplementation((sql, params) => {
-      if (sql.includes('SELECT id FROM users WHERE email = ?')) {
-        if (params && params[0] === 'existing@example.com') {
-          return Promise.resolve([[{ id: 'usr_existing' }]]);
-        }
-        return Promise.resolve([[]]);
+      if (sql.includes('SELECT id FROM users WHERE id =')) {
+        return Promise.resolve({ rows: [{ id: params[0] }] });
       }
-      if (sql.includes('SELECT * FROM users WHERE email = ?')) {
-        if (params && params[0] === 'unverified@example.com') {
-          const bcrypt = require('bcryptjs');
-          return Promise.resolve([[{
-            id: 'usr_unverified',
-            name: 'Unverified User',
-            email: 'unverified@example.com',
-            password: bcrypt.hashSync('password123', 10),
-            verified: 0,
-            verificationToken: 'vtf_unverified'
-          }]]);
+      if (sql.includes('SELECT id FROM users WHERE email =')) {
+        if (params && params[0] === 'existing@example.com') {
+          return Promise.resolve({ rows: [{ id: 'usr_existing' }] });
         }
+        return Promise.resolve({ rows: [] });
+      }
+      if (sql.includes('SELECT * FROM users WHERE email =')) {
         if (params && params[0] === 'verified@example.com') {
           const bcrypt = require('bcryptjs');
-          return Promise.resolve([[{
+          return Promise.resolve({ rows: [{
             id: 'usr_test123',
             name: 'Verified User',
             email: 'verified@example.com',
             password: bcrypt.hashSync('password123', 10),
-            verified: 1,
-            verificationToken: null
-          }]]);
+            verified: 1
+          }]});
         }
-        return Promise.resolve([[]]);
+        return Promise.resolve({ rows: [] });
       }
-      if (sql.includes('SELECT id, name FROM users WHERE verificationToken = ?')) {
-        if (params && params[0] === 'vtf_valid') {
-          return Promise.resolve([[{ id: 'usr_test123', name: 'Verified User' }]]);
-        }
-        return Promise.resolve([[]]);
-      }
-      return Promise.resolve([[]]);
+      return Promise.resolve({ rows: [] });
     }),
+    connect: jest.fn().mockResolvedValue(mockConnection),
     getConnection: jest.fn().mockResolvedValue(mockConnection),
     release: jest.fn()
   };
@@ -82,10 +68,10 @@ const jwt = require('jsonwebtoken');
 const app = require('../server');
 
 describe('Zod Schema and Auth Logic Endpoints', () => {
-  describe('POST /api/auth/signup', () => {
-    it('should reject signup with missing fields', async () => {
+  describe('POST /api/auth/register', () => {
+    it('should reject registration with missing fields', async () => {
       const res = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/auth/register')
         .send({});
       
       expect(res.status).toBe(400);
@@ -99,63 +85,50 @@ describe('Zod Schema and Auth Logic Endpoints', () => {
       );
     });
 
-    it('should reject signup with invalid email format', async () => {
+    it('should reject registration with invalid email format', async () => {
       const res = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/auth/register')
         .send({ name: 'Test User', email: 'invalidemail', password: 'password123' });
 
       expect(res.status).toBe(400);
       expect(res.body.details[0].field).toBe('email');
     });
 
-    it('should reject signup with too short password', async () => {
+    it('should reject registration with too short password', async () => {
       const res = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/auth/register')
         .send({ name: 'Test User', email: 'test@example.com', password: '123' });
 
       expect(res.status).toBe(400);
       expect(res.body.details[0].field).toBe('password');
     });
 
-    it('should successfully register a new user as unverified without returning tokens', async () => {
+    it('should successfully register a new user and request OTP verification', async () => {
       const res = await request(app)
-        .post('/api/auth/signup')
+        .post('/api/auth/register')
         .send({ name: 'New User', email: 'new@example.com', password: 'password123' });
 
-      expect(res.status).toBe(201);
-      expect(res.body.success).toBe(true);
-      expect(res.body.token).toBeUndefined();
-      expect(res.body.refreshToken).toBeUndefined();
-      expect(res.body.user).toBeDefined();
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe('OTP sent to your email.');
     });
   });
 
-  describe('GET /api/auth/verify', () => {
-    it('should reject verification when token query parameter is missing', async () => {
+  describe('POST /api/auth/verify-otp', () => {
+    it('should reject verification when email is missing', async () => {
       const res = await request(app)
-        .get('/api/auth/verify');
+        .post('/api/auth/verify-otp')
+        .send({ otp: '123456' });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Verification token is required.');
+      expect(res.body.error).toBe('Email and OTP are required.');
     });
 
-    it('should reject invalid verification token', async () => {
+    it('should reject invalid verification otp', async () => {
       const res = await request(app)
-        .get('/api/auth/verify')
-        .query({ token: 'vtf_invalid' });
+        .post('/api/auth/verify-otp')
+        .send({ email: 'test@example.com', otp: 'wrongotp' });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Invalid or expired verification token.');
-    });
-
-    it('should successfully verify a user with a valid token', async () => {
-      const res = await request(app)
-        .get('/api/auth/verify')
-        .query({ token: 'vtf_valid' });
-
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.message).toContain('Account verified successfully');
     });
   });
 
@@ -174,8 +147,8 @@ describe('Zod Schema and Auth Logic Endpoints', () => {
         .post('/api/auth/login')
         .send({ email: 'unverified@example.com', password: 'password123' });
 
-      expect(res.status).toBe(403);
-      expect(res.body.error).toBe('Please verify your email first before logging in.');
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe('Invalid email or password.');
     });
 
     it('should accept login for verified user and return tokens', async () => {
@@ -184,8 +157,7 @@ describe('Zod Schema and Auth Logic Endpoints', () => {
         .send({ email: 'verified@example.com', password: 'password123' });
 
       expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.token).toBeDefined();
+      expect(res.body.accessToken).toBeDefined();
       expect(res.body.refreshToken).toBeDefined();
     });
   });
