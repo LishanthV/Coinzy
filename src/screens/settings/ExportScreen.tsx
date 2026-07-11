@@ -58,7 +58,8 @@ export default function ExportScreen() {
     return [header, ...rows].map((r) => r.join(',')).join('\n');
   };
 
-  const onExport = async () => {
+ const onExport = async () => {
+    RNAlert.alert('Debug', 'Export button pressed. Transactions: ' + sorted.length);
     if (sorted.length === 0) {
       RNAlert.alert('No transactions', 'No transactions found in the selected date range.');
       return;
