@@ -15,6 +15,7 @@ import AddTransactionScreen from '../screens/transactions/AddTransactionScreen';
 import SavingsGoalsScreen from '../screens/goals/SavingsGoalsScreen';
 import SpendingForecastScreen from '../screens/SpendingForecastScreen';
 import LoanPlannerScreen from '../screens/LoanPlannerScreen';
+import ExportScreen from '../screens/settings/ExportScreen';
 import { useAuthStore } from '../store/useAuthStore';
 import { RootStackParamList } from './types';
 import { colors } from '../theme';
@@ -90,6 +91,11 @@ export function RootNavigator() {
             <Stack.Screen
               name="LoanPlanner"
               component={LoanPlannerScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="Export"
+              component={ExportScreen}
               options={{ animation: 'slide_from_right' }}
             />
           </>
