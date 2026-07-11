@@ -115,6 +115,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       ]);
 
       set({ user, accessToken: data.accessToken, refreshToken: data.refreshToken });
+      // Load user data from server after login
+      const { loadUserData } = require('./useFinanceStore').useFinanceStore.getState();
+      await loadUserData(data.userId, data.accessToken);
       return { error: null };
     } catch (e: any) {
       return { error: e || new Error('Connection failed') };

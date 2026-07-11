@@ -13,13 +13,8 @@ const { validate, schemas } = require('./validation');
 const app = express();
 
 // ─── Global middleware ────────────────────────────────────────────────────────
-app.use(require('helmet')());
 app.use(cors({
-  origin: [
-    'https://coinzy-badr.onrender.com',
-    'http://localhost:5000',
-    'http://10.224.237.42:5000',
-  ],
+  origin: true,
   credentials: true,
 }));
 app.use(express.json({ limit: '2mb' }));
