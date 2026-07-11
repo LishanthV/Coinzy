@@ -11,7 +11,7 @@ import StatisticsScreen from '../screens/statistics/StatisticsScreen';
 import BudgetsScreen from '../screens/budgets/BudgetsScreen';
 import RecurringScreen from '../screens/recurring/RecurringScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
-import { colors, fonts, fontSizes } from '../theme';
+import { useAppTheme, fonts, fontSizes, colors } from '../theme';
 import { MainTabParamList, RootStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -40,21 +40,22 @@ function FAB() {
 export function MainNavigator() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 64 + insets.bottom;
+  const { colors: themeColors } = useAppTheme();
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.borderSoft,
+          backgroundColor: themeColors.surface,
+          borderTopColor: themeColors.borderSoft,
           borderTopWidth: 1,
           height: tabBarHeight,
           paddingBottom: insets.bottom + 8,
           paddingTop: 8,
         },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textFaint,
+        tabBarActiveTintColor: themeColors.primary,
+        tabBarInactiveTintColor: themeColors.textFaint,
         tabBarLabelStyle: styles.tabLabel,
         tabBarIcon: ({ focused, color }) => {
           const icons = TAB_ICONS[route.name];
@@ -69,9 +70,10 @@ export function MainNavigator() {
         name="Statistics"
         component={StatisticsScreen}
         options={{
-          tabBarButton: (props) => (
+          tabBarLabel: () => null,
+          tabBarIcon: () => null,
+          tabBarButton: () => (
             <View style={styles.fabContainer}>
-              {props.children}
               <FAB />
             </View>
           ),
