@@ -11,6 +11,8 @@ import { Screen, SectionHeader, Card, Button, FormInput } from '../../components
 import { CategoryIcon } from '../../components/finance';
 import { colors, fonts, fontSizes, radii, spacing } from '../../theme';
 import { useFinanceStore } from '../../store/useFinanceStore';
+import { requestSmsPermission, hasSmsPermission, startSmsAutoTrack, stopSmsAutoTrack } from '../../utils/smsAutoTrack';
+import { Platform } from 'react-native';
 import { useAuthStore } from '../../store/useAuthStore';
 import { formatCurrency } from '../../utils/format';
 import { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -36,6 +38,30 @@ export default function SettingsScreen() {
   const notificationsEnabled = useAuthStore((s) => s.notificationsEnabled);
   const setNotificationsEnabled = useAuthStore((s) => s.setNotificationsEnabled);
   const accounts = useFinanceStore((s) => s.accounts);
+  const [smsTrackEnabled, setSmsTrackEnabled] = useState(false);
+
+React.useEffect(() => {
+  hasSmsPermission().then(setSmsTrackEnabled);
+}, []);
+
+const handleToggleSmsTrack = async (value: boolean) => {
+  if (Platform.OS !== 'android') {
+    Alert.alert('Not available', 'SMS auto-tracking is only available on Android.');
+    return;
+  }
+  if (value) {
+    const granted = await requestSmsPermission();
+    if (granted && accounts[0]?.id) {
+      startSmsAutoTrack(accounts[0].id);
+      setSmsTrackEnabled(true);
+    } else {
+      Alert.alert('Permission denied', 'SMS permission is required for auto-tracking.');
+    }
+  } else {
+    stopSmsAutoTrack();
+    setSmsTrackEnabled(false);
+  }
+};
   const resetToSeed = useFinanceStore((s) => s.resetToSeed);
 
   const [name, setName] = useState(user?.name ?? '');
