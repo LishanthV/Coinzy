@@ -11,19 +11,13 @@
       "resizeMode": "contain",
       "backgroundColor": "#0B0E14"
     },
-    "ios": {
-      "supportsTablet": false,
-      "bundleIdentifier": "com.coinzy.app"
-    },
     "android": {
       "package": "com.coinzy.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#060814"
-      }
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      },
+      "permissions": ["RECEIVE_SMS", "READ_SMS"]
     },
     "plugins": [
       "expo-font",
