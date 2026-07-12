@@ -2,7 +2,9 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   SignUp: undefined;
-  OTPVerification: { email: string; name: string };
+ OTPVerification: { email: string; name: string };
+  ForgotPassword: undefined;
+  ResetPassword: { email: string };
   Main: undefined;
   TxnDetail: { id: string };
   AddTransaction: { editId?: string } | undefined;
