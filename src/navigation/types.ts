@@ -13,6 +13,7 @@ export type RootStackParamList = {
   AddGoal: { editId?: string } | undefined;
   SpendingForecast: undefined;
   LoanPlanner: undefined;
+  UPISync: undefined;
 };
 
 export type MainTabParamList = {

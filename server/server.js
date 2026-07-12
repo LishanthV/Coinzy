@@ -8,6 +8,7 @@ const authRoutes        = require('./routes/auth');
 const transactionRoutes = require('./routes/transactions');
 const financeRoutes     = require('./routes/finance');
 const logsRoutes        = require('./routes/logs');
+const upiRoutes         = require('./routes/upi');
 const { validate, schemas } = require('./validation');
 
 const app = express();
@@ -29,6 +30,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/logs', logsRoutes);
+app.use('/api/upi', upiRoutes);
 app.use('/api', financeRoutes);
 
 // Also support routes without /api prefix (backwards compat with frontend)

@@ -164,15 +164,52 @@ async function runMigrations() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_device_accounts_device_id ON device_accounts(device_id);`);
 
+    // ── Password Resets ────────────────────────────────────────────────────────
+    // Drop old schema if it has the legacy user_id PRIMARY KEY (no email column)
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'password_resets' AND column_name = 'user_id'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'password_resets' AND column_name = 'email'
+        ) THEN
+          DROP TABLE IF EXISTS password_resets;
+        END IF;
+      END;
+      $$;
+    `);
     await client.query(`
       CREATE TABLE IF NOT EXISTS password_resets (
-        user_id    VARCHAR(36) PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-        otp        VARCHAR(6)  NOT NULL,
-        reset_token VARCHAR(64) NULL,
-        attempts   SMALLINT    DEFAULT 0,
-        expires_at TIMESTAMP   NOT NULL
+        id           VARCHAR(36)  PRIMARY KEY,
+        user_id      VARCHAR(36)  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        email        VARCHAR(255) NOT NULL UNIQUE,
+        otp          VARCHAR(6)   NOT NULL,
+        otp_attempts SMALLINT     DEFAULT 0,
+        expires_at   TIMESTAMP    NOT NULL
       );
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_pwreset_email ON password_resets(email);`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS upi_transactions (
+        id         VARCHAR(36)   PRIMARY KEY,
+        user_id    VARCHAR(36)   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        account_id VARCHAR(36)   NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        amount     DECIMAL(15,2) NOT NULL,
+        type       VARCHAR(20)   NOT NULL DEFAULT 'expense',
+        merchant   VARCHAR(255)  NULL,
+        date       DATE          NOT NULL,
+        upi_ref    VARCHAR(100)  NULL,
+        raw_sms    TEXT          NULL,
+        synced_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_upi_user_id ON upi_transactions(user_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_upi_date ON upi_transactions(date);`);
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_upi_ref ON upi_transactions(user_id, upi_ref) WHERE upi_ref IS NOT NULL;`);
+
     console.log('✅ PostgreSQL Migrations complete');
 
   } finally {

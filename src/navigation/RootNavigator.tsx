@@ -16,6 +16,7 @@ import SavingsGoalsScreen from '../screens/goals/SavingsGoalsScreen';
 import SpendingForecastScreen from '../screens/SpendingForecastScreen';
 import LoanPlannerScreen from '../screens/LoanPlannerScreen';
 import ExportScreen from '../screens/settings/ExportScreen';
+import UPISyncScreen from '../screens/UPISyncScreen';
 import { useAuthStore } from '../store/useAuthStore';
 import { RootStackParamList } from './types';
 import { colors } from '../theme';
@@ -96,6 +97,11 @@ export function RootNavigator() {
             <Stack.Screen
               name="Export"
               component={ExportScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="UPISync"
+              component={UPISyncScreen}
               options={{ animation: 'slide_from_right' }}
             />
           </>

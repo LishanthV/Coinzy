@@ -387,6 +387,15 @@ export default function SettingsScreen() {
             <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
           </Pressable>
           <View style={styles.divider} />
+          <Pressable style={styles.linkRow} onPress={() => navigation.navigate('UPISync')}>
+            <Ionicons name="phone-portrait-outline" size={20} color={colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkText}>UPI SMS Sync</Text>
+              <Text style={[styles.linkText, { fontSize: 12, color: colors.textFaint, fontFamily: fonts.body, marginTop: 1 }]}>Import transactions from UPI SMS</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+          </Pressable>
+          <View style={styles.divider} />
           <Pressable
             style={styles.linkRow}
             onPress={() =>
