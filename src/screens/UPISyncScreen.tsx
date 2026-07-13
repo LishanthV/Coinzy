@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Screen, Card, SectionHeader, Button } from '../components/ui';
 import { colors, fonts, fontSizes, spacing, radii } from '../theme';
+import { PermissionsAndroid } from 'react-native';
+import SmsAndroid from 'react-native-get-sms-android';
 import { useAuthStore } from '../store/useAuthStore';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { formatCurrency } from '../utils/format';
@@ -53,11 +55,46 @@ export default function UPISyncScreen() {
   const [error, setError] = useState<string | null>(null);
 
   // ── Parse step ────────────────────────────────────────────────────────────
+ const readRealSms = (): Promise<string[]> => {
+    return new Promise(async (resolve) => {
+      if (Platform.OS !== 'android') {
+        resolve(DEMO_SMS);
+        return;
+      }
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.READ_SMS,
+        {
+          title: 'SMS Permission',
+          message: 'Coinzy needs SMS access to import your UPI transaction history.',
+          buttonPositive: 'Allow',
+        }
+      );
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        resolve(DEMO_SMS);
+        return;
+      }
+      const filter = { box: 'inbox', maxCount: 100 };
+      SmsAndroid.list(
+        JSON.stringify(filter),
+        (fail: any) => {
+          console.log('SMS read failed:', fail);
+          resolve(DEMO_SMS);
+        },
+        (count: number, smsList: string) => {
+          const parsed = JSON.parse(smsList);
+          const bodies = parsed.map((sms: any) => sms.body).filter(Boolean);
+          resolve(bodies.length > 0 ? bodies : DEMO_SMS);
+        }
+      );
+    });
+  };
+
+  // ── Parse step ────────────────────────────────────────────────────────────
   const handleParse = useCallback(async () => {
     setStep('parsing');
     setError(null);
     try {
-      const messages = DEMO_SMS; // On Android you'd use native SMS reader
+      const messages = await readRealSms();
       const res = await fetch(`${BASE_URL}/api/upi/parse`, {
         method: 'POST',
         headers: {
