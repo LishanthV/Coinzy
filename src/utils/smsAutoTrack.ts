@@ -1,4 +1,4 @@
-import SmsListener from 'react-native-android-sms-listener';
+// import SmsListener from 'react-native-android-sms-listener'; // Temporarily disabled - incompatible with Expo SDK 54
 import { PermissionsAndroid, Platform } from 'react-native';
 import { useFinanceStore } from '../store/useFinanceStore';
 
@@ -66,29 +66,10 @@ function parseTransactionSms(body: string): { type: 'income' | 'expense'; amount
 }
 
 export function startSmsAutoTrack(accountId: string) {
-  if (Platform.OS !== 'android') return;
-  stopSmsAutoTrack();
-
-  subscription = SmsListener.addListener((message: SmsMessage) => {
-    const sender = message.originatingAddress || '';
-    const body = message.body || '';
-
-    if (!isBankSender(sender)) return;
-
-    const parsed = parseTransactionSms(body);
-    if (!parsed) return;
-
-    const category = inferCategory(body.toLowerCase());
-
-    useFinanceStore.getState().addTransaction({
-      type: parsed.type,
-      amount: parsed.amount,
-      accountId,
-      categoryId: category,
-      note: `Auto-tracked: ${sender}`,
-      date: new Date().toISOString(),
-    });
-  });
+  // SMS auto-tracking temporarily disabled — react-native-android-sms-listener
+  // is not compatible with Expo SDK 54 / React Native 0.81.
+  // TODO: Replace with expo-sms or a bare workflow native module.
+  console.log('[smsAutoTrack] SMS tracking disabled for testing');
 }
 
 export function stopSmsAutoTrack() {
